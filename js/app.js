@@ -535,6 +535,7 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
 
     html += `<div class="tt-fill">
       <div class="tt-fill-title">${bestRoute['번호']}번 오늘 시간표 (${bestRoute['기점']}→${bestRoute['종점']})</div>
+      <div style="font-size:11px;color:#999;margin:0 0 8px;padding:0 2px">※ 첫차·막차·횟수 기준 추정 시간표입니다. 실제와 다를 수 있습니다.</div>
       <div class="tt-grid">`;
     times.forEach(t => {
       const [th, tm] = t.split(':').map(Number);
@@ -862,7 +863,8 @@ function showHubDetail(idx) {
   html += `<a class="book-link" href="${hub.bookUrl}" target="_blank">
     <span class="book-link-text">${hub.bookLabel}</span>
     <span class="book-link-arr">→</span>
-  </a>`;
+  </a>
+  <div style="font-size:11px;color:#aaa;text-align:center;padding:10px 0 4px">※ 시간표는 참고용이며 실제와 다를 수 있습니다. 예매 전 반드시 확인하세요.</div>`;
 
   detail.innerHTML = html;
 }
@@ -890,6 +892,10 @@ function saveSearchHistory(from, to) {
   }
   existing.sort((a, b) => b.count - a.count);
   localStorage.setItem('seocheon_route_history', JSON.stringify(existing.slice(0, 20)));
+}
+
+function initFavorites() {
+  renderFavorites();
 }
 
 function renderFavorites() {
