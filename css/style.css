@@ -269,25 +269,27 @@ html, body {
 /* 시간표 채우기 */
 .tt-fill {
   margin: 0 10px 8px;
-  background: #f8f8f8;
-  border-radius: 10px;
-  padding: 10px 12px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e8f5f0;
+  border-left: 3px solid #1D9E75;
 }
 .tt-fill-title { font-size: 11px; font-weight: 700; color: var(--gray-text); margin-bottom: 8px; }
 .tt-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
 }
 .tt-chip {
-  background: var(--white);
-  border-radius: 6px;
-  padding: 5px 4px;
+  background: #f8f8f8;
+  border-radius: 7px;
+  padding: 6px 4px;
   text-align: center;
   border: 0.5px solid var(--gray-border);
 }
 .tt-chip.next-dep { background: var(--green); border-color: var(--green); }
-.tt-chip.passed { opacity: .4; }
+.tt-chip.passed { opacity: .35; }
 .tt-chip-time { font-size: 12px; font-weight: 700; color: var(--text); }
 .tt-chip.next-dep .tt-chip-time { color: var(--white); }
 .tt-chip-lbl { font-size: 9px; color: var(--gray-text); margin-top: 1px; }

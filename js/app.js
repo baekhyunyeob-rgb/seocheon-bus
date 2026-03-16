@@ -40,9 +40,14 @@ const HUBS = [
   {
     id: 'seocheon-station', name: '서천역', type: 'train',
     lat: 36.0680, lng: 126.6850,
-    destinations: [
+    direction: true,
+    upward: [
       { name: '서울(용산)', duration: '약 2시간 10분', times: ['06:42','09:18','12:05','14:22','16:48','19:05','21:30'], lastReturn: '서울 → 서천 22:10' },
       { name: '대전', duration: '약 45분', times: ['07:10','09:50','12:30','15:10','17:40','20:20'], lastReturn: '대전 → 서천 22:00' },
+    ],
+    downward: [
+      { name: '익산', duration: '약 30분', times: ['07:55','10:35','13:15','15:55','18:25','21:05'], lastReturn: '익산 → 서천 22:30' },
+      { name: '군산', duration: '약 50분', times: ['08:10','10:50','13:30','16:10','18:40','21:20'], lastReturn: '군산 → 서천 22:45' },
     ],
     bookUrl: 'https://www.letskorail.com',
     bookLabel: '코레일 예매 바로가기'
@@ -60,9 +65,14 @@ const HUBS = [
   {
     id: 'janghang-station', name: '장항역', type: 'train',
     lat: 36.0020, lng: 126.6820,
-    destinations: [
+    direction: true,
+    upward: [
       { name: '서울(용산)', duration: '약 2시간 20분', times: ['06:55','09:30','12:18','14:35','17:02','19:20','21:48'], lastReturn: '서울 → 장항 21:55' },
       { name: '대전', duration: '약 50분', times: ['07:20','10:00','12:40','15:20','17:50','20:30'], lastReturn: '대전 → 장항 21:50' },
+    ],
+    downward: [
+      { name: '익산', duration: '약 25분', times: ['08:05','10:45','13:25','16:05','18:35','21:15'], lastReturn: '익산 → 장항 22:35' },
+      { name: '군산', duration: '약 45분', times: ['08:20','11:00','13:40','16:20','18:50','21:30'], lastReturn: '군산 → 장항 22:50' },
     ],
     bookUrl: 'https://www.letskorail.com',
     bookLabel: '코레일 예매 바로가기'
@@ -271,12 +281,24 @@ function onPlaceInput(val) {
 
   container.innerHTML = '<div class="modal-section-label">정류장 검색결과</div>' +
     results.map(s => `
-    <div class="modal-item" onclick="selectPlace('${placeSearchTarget}', {name:'${s.name}', lat:${s.lat}, lng:${s.lng}})">
-      <div class="modal-item-icon">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#1D9E75"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
+    <div class="modal-item" style="display:flex;align-items:center">
+      <div style="flex:1;display:flex;align-items:center;gap:8px" onclick="selectPlace('${placeSearchTarget}', {name:'${s.name}', lat:${s.lat}, lng:${s.lng}})">
+        <div class="modal-item-icon">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#1D9E75"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
+        </div>
+        <div class="modal-item-name">${s.name}</div>
       </div>
-      <div><div class="modal-item-name">${s.name}</div></div>
+      <button onclick="savePlace({name:'${s.name}',lat:${s.lat},lng:${s.lng}})" style="background:none;border:1px solid #ddd;border-radius:6px;padding:3px 8px;font-size:10px;color:#888;cursor:pointer;flex-shrink:0">저장</button>
     </div>`).join('');
+}
+
+function savePlace(place) {
+  const label = prompt(`"${place.name}" 을 저장합니다.\n별칭을 입력하세요 (예: 집, 직장, 학교)`);
+  if (!label) return;
+  const newPlace = { ...place, label, type: 'saved' };
+  savedPlaces = [newPlace, ...savedPlaces.filter(p => p.name !== place.name)].slice(0, 10);
+  localStorage.setItem('seocheon_places', JSON.stringify(savedPlaces));
+  alert(`"${label}" 로 저장됐습니다! 즐겨찾기 탭에서 확인하세요.`);
 }
 
 function selectPlace(target, place) {
@@ -294,6 +316,7 @@ function selectPlace(target, place) {
     }
     if (mapHome && !place.isGps) {
       mapHome.panTo(new kakao.maps.LatLng(place.lat, place.lng));
+      updateHomeMarkers();
     }
   } else if (target === 'via') {
     const el = document.getElementById('text-via');
@@ -305,6 +328,7 @@ function selectPlace(target, place) {
     el.classList.remove('loc-placeholder');
     if (mapHome) {
       mapHome.panTo(new kakao.maps.LatLng(place.lat, place.lng));
+      updateHomeMarkers();
     }
   }
 
@@ -315,6 +339,56 @@ function selectPlace(target, place) {
   }
 
   closePlaceModal();
+}
+
+let homeFromMarker = null, homeToMarker = null;
+let homeFromLabel = null, homeToLabel = null;
+
+function updateHomeMarkers() {
+  if (!mapHome) return;
+
+  // 기존 마커 제거
+  if (homeFromMarker) homeFromMarker.setMap(null);
+  if (homeToMarker) homeToMarker.setMap(null);
+  if (homeFromLabel) homeFromLabel.setMap(null);
+  if (homeToLabel) homeToLabel.setMap(null);
+
+  const from = searchState.from;
+  const to = searchState.to;
+
+  if (from && from.lat && !from.isGps) {
+    homeFromMarker = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(from.lat, from.lng),
+      map: mapHome, zIndex: 5
+    });
+    homeFromLabel = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(from.lat, from.lng),
+      content: `<div style="background:#185FA5;color:#fff;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;margin-bottom:4px">출발</div>`,
+      yAnchor: 2.8
+    });
+    homeFromLabel.setMap(mapHome);
+  }
+
+  if (to && to.lat) {
+    homeToMarker = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(to.lat, to.lng),
+      map: mapHome, zIndex: 5
+    });
+    homeToLabel = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(to.lat, to.lng),
+      content: `<div style="background:#1D9E75;color:#fff;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;margin-bottom:4px">도착</div>`,
+      yAnchor: 2.8
+    });
+    homeToLabel.setMap(mapHome);
+  }
+
+  // 두 지점 모두 있으면 범위 맞춤
+  if (from?.lat && to?.lat) {
+    const bounds = new kakao.maps.LatLngBounds();
+    bounds.extend(new kakao.maps.LatLng(from.lat, from.lng));
+    bounds.extend(new kakao.maps.LatLng(to.lat, to.lng));
+    mapHome.setBounds(bounds, 80);
+  }
 }
 
 // ==================== 시간 설정 ====================
@@ -387,10 +461,12 @@ function getDayType() {
 
 function findRoutes(fromName, toName, searchTime, dayType) {
   const results = [];
+  const fromKey = fromName.replace('현위치', '서천');
 
+  // 직행 탐색
   ROUTES.forEach(route => {
     const stops = getRouteStops(route);
-    const fromIdx = stops.findIndex(s => s.includes(fromName.replace('현위치','서천')));
+    const fromIdx = stops.findIndex(s => s.includes(fromKey));
     const toIdx = stops.findIndex(s => s.includes(toName));
 
     if (toIdx === -1) return;
@@ -400,22 +476,61 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     const nextBus = getNextBus(route, searchTime, dayType);
     if (!nextBus) return;
 
-    const transferCount = 0;
-    const distanceKm = route['거리'] || 0;
-    const minutes = estimateMinutes(distanceKm);
-
     results.push({
-      route,
-      stops,
-      nextBus,
-      transferCount,
-      minutes,
-      distanceKm,
-      dayType
+      route, stops, nextBus,
+      transferCount: 0,
+      minutes: estimateMinutes(route['거리'] || 0),
+      distanceKm: route['거리'] || 0,
+      dayType, isTransfer: false
     });
   });
 
-  // 소요시간 순 정렬
+  // 환승 탐색 (직행 결과 없을 때)
+  if (results.length === 0) {
+    const HUBS_LIST = ['서천터미널', '장항터미널', '한산공용터미널'];
+    HUBS_LIST.forEach(hub => {
+      // 1구간: from → hub
+      const leg1Routes = ROUTES.filter(r => {
+        const stops = getRouteStops(r);
+        const fi = stops.findIndex(s => s.includes(fromKey));
+        const ti = stops.findIndex(s => s.includes(hub));
+        return ti !== -1 && (fromName === '현위치' || fi !== -1) && (fi === -1 || fi < ti);
+      });
+      // 2구간: hub → to
+      const leg2Routes = ROUTES.filter(r => {
+        const stops = getRouteStops(r);
+        const fi = stops.findIndex(s => s.includes(hub));
+        const ti = stops.findIndex(s => s.includes(toName));
+        return fi !== -1 && ti !== -1 && fi < ti;
+      });
+
+      if (leg1Routes.length > 0 && leg2Routes.length > 0) {
+        const r1 = leg1Routes[0];
+        const r2 = leg2Routes[0];
+        const bus1 = getNextBus(r1, searchTime, dayType);
+        if (!bus1) return;
+        // 환승 후 다음 버스 (30분 여유)
+        const [h, m] = bus1.split(':').map(Number);
+        const transferTime = new Date(searchTime);
+        transferTime.setHours(h, m + 30, 0);
+        const bus2 = getNextBus(r2, transferTime, dayType);
+        if (!bus2) return;
+
+        results.push({
+          route: r1, route2: r2,
+          stops: getRouteStops(r1),
+          stops2: getRouteStops(r2),
+          nextBus: bus1, nextBus2: bus2,
+          transferHub: hub,
+          transferCount: 1,
+          minutes: estimateMinutes((r1['거리']||0) + (r2['거리']||0)) + 15,
+          distanceKm: (r1['거리']||0) + (r2['거리']||0),
+          dayType, isTransfer: true
+        });
+      }
+    });
+  }
+
   results.sort((a, b) => a.minutes - b.minutes);
   return results.slice(0, 3);
 }
@@ -477,6 +592,14 @@ function getMinutesUntil(timeStr) {
   return targetMin - nowMin;
 }
 
+function formatWaitTime(min) {
+  if (min <= 0) return '곧 출발';
+  if (min < 60) return `${min}분 후`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m > 0 ? `${h}시간 ${m}분 후` : `${h}시간 후`;
+}
+
 // ==================== 결과 렌더링 ====================
 function renderResults(results, toName, fromName, timeStr, dayType) {
   const body = document.getElementById('result-body');
@@ -495,21 +618,38 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
   results.forEach((r, i) => {
     const isBest = i === 0;
     const waitMin = getMinutesUntil(r.nextBus);
-    const waitText = waitMin > 0 ? `(${waitMin}분 후)` : '곧 출발';
+    const waitText = formatWaitTime(waitMin);
     const stops = r.stops;
     const routePreview = stops.slice(0,4).join(' → ') + (stops.length > 4 ? ' ...' : '');
+
+    if (r.isTransfer) {
+      html += `<div class="route-card" onclick="showDetail(${i})">
+        <div class="rc-top">
+          <span class="rc-time">${r.minutes}분</span>
+          <span class="rc-badge badge-transfer">1회 환승</span>
+        </div>
+        <div class="rc-route">
+          <span class="bus-pill">${r.route['번호']}번</span>
+          <span class="route-arrow">→ ${r.transferHub} 환승 →</span>
+          <span class="bus-pill">${r.route2['번호']}번</span>
+        </div>
+        <div class="rc-info">${r.transferHub}에서 환승 · ${r.nextBus2} 출발</div>
+        <div class="rc-next">첫 버스 <strong>${r.nextBus}</strong> 출발 · <span style="color:#1D9E75">${waitText}</span></div>
+      </div>`;
+      return;
+    }
 
     html += `<div class="route-card ${isBest ? 'best' : ''}" onclick="showDetail(${i})">
       <div class="rc-top">
         <span class="rc-time">${r.minutes}분</span>
-        <span class="rc-badge ${isBest ? 'badge-best' : 'badge-transfer'}">${isBest ? '최단 직행' : '경유'}</span>
+        <span class="rc-badge ${isBest ? 'badge-best' : 'badge-transfer'}">${isBest ? '최단 직행' : '직행'}</span>
       </div>
       <div class="rc-route">
         <span class="bus-pill">${r.route['번호']}번 ${r.route['노선군'].replace(/[0-9~번]/g,'').trim().substring(0,4)}</span>
         <span class="route-arrow">직행 ${r.distanceKm}km</span>
       </div>
       <div class="rc-info">${routePreview}</div>
-      <div class="rc-next">다음 버스 ${r.nextBus} 출발 ${waitText}</div>
+      <div class="rc-next">다음 버스 <strong>${r.nextBus}</strong> 출발 · <span style="color:#1D9E75">${waitText}</span></div>
     </div>`;
   });
 
@@ -538,8 +678,11 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
     const nextBusTime = results[0].nextBus;
 
     html += `<div class="tt-fill">
-      <div class="tt-fill-title">${bestRoute['번호']}번 오늘 시간표 (${bestRoute['기점']}→${bestRoute['종점']})</div>
-      <div style="font-size:11px;color:#999;margin:0 0 8px;padding:0 2px">※ 첫차·막차·횟수 기준 추정 시간표입니다. 실제와 다를 수 있습니다.</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="background:#1D9E75;color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">${bestRoute['번호']}번</span>
+        <span style="font-size:13px;font-weight:600;color:#333">${bestRoute['기점']} → ${bestRoute['종점']}</span>
+      </div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:10px;padding:0 2px">※ 추정 시간표 · 실제와 다를 수 있음</div>
       <div class="tt-grid">`;
     times.forEach(t => {
       const [th, tm] = t.split(':').map(Number);
@@ -642,19 +785,68 @@ function renderStopList(stops, nextBus) {
 
 function initDetailMap(result) {
   const container = document.getElementById('map-detail');
-  if (!container || mapDetail) return;
+  if (!container) return;
 
-  const centerLat = (myLocation.lat + (result.route ? 36.1 : myLocation.lat)) / 2;
+  // 기존 지도 초기화
+  if (mapDetail) {
+    mapDetail = null;
+    container.innerHTML = '';
+  }
+
+  // 출발지·도착지 좌표 찾기
+  const fromName = searchState.from ? searchState.from.name : '서천터미널';
+  const toName = searchState.to ? searchState.to.name : '';
+
+  const fromStop = searchState.from?.lat
+    ? searchState.from
+    : STOPS.find(s => s.name.includes(fromName.substring(0,4)));
+  const toStop = searchState.to?.lat
+    ? searchState.to
+    : STOPS.find(s => s.name.includes(toName.substring(0,4)));
+
+  const centerLat = fromStop ? fromStop.lat : myLocation.lat;
+  const centerLng = fromStop ? fromStop.lng : myLocation.lng;
+
   mapDetail = new kakao.maps.Map(container, {
-    center: new kakao.maps.LatLng(centerLat, myLocation.lng),
+    center: new kakao.maps.LatLng(centerLat, centerLng),
     level: 9
   });
 
-  // 내 위치
-  new kakao.maps.Marker({
-    position: new kakao.maps.LatLng(myLocation.lat, myLocation.lng),
-    map: mapDetail
-  });
+  // 출발지 마커 (파란색)
+  if (fromStop) {
+    const fromMarker = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(fromStop.lat, fromStop.lng),
+      map: mapDetail
+    });
+    const fromLabel = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(fromStop.lat, fromStop.lng),
+      content: `<div style="background:#185FA5;color:#fff;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;margin-bottom:4px">출발</div>`,
+      yAnchor: 2.8
+    });
+    fromLabel.setMap(mapDetail);
+  }
+
+  // 도착지 마커 (초록색)
+  if (toStop) {
+    const toMarker = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(toStop.lat, toStop.lng),
+      map: mapDetail
+    });
+    const toLabel = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(toStop.lat, toStop.lng),
+      content: `<div style="background:#1D9E75;color:#fff;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;margin-bottom:4px">도착</div>`,
+      yAnchor: 2.8
+    });
+    toLabel.setMap(mapDetail);
+  }
+
+  // 두 지점이 모두 있으면 지도 범위 자동 조정
+  if (fromStop && toStop) {
+    const bounds = new kakao.maps.LatLngBounds();
+    bounds.extend(new kakao.maps.LatLng(fromStop.lat, fromStop.lng));
+    bounds.extend(new kakao.maps.LatLng(toStop.lat, toStop.lng));
+    mapDetail.setBounds(bounds, 80);
+  }
 }
 
 // ==================== 노선도 ====================
@@ -731,7 +923,7 @@ function renderRouteList(zoneId) {
   container.innerHTML = filtered.map(r => {
     const color = getZoneColor(r);
     const countKey = getDayType() === 'weekday' ? '평일횟수' : '토요일횟수';
-    return `<div class="route-list-item" onclick="showRouteTimetable('${r['번호']}')">
+    return `<div class="route-list-item" onclick="showRouteTimetable('${r['번호']}'); showRouteOnMap(${JSON.stringify({기점:r['기점'],종점:r['종점']})})">
       <span class="rli-num" style="background:${color}">${r['번호']}</span>
       <div class="rli-info">
         <div class="rli-name">${r['노선군'].replace('~','~')}</div>
@@ -824,6 +1016,38 @@ function initRoutesMap() {
   });
 }
 
+let routeMarkers = [];
+function showRouteOnMap(route) {
+  if (!mapRoutes) return;
+  routeMarkers.forEach(m => m.setMap(null));
+  routeMarkers = [];
+
+  // 기점·종점 stops에서 좌표 찾기
+  const fromStop = STOPS.find(s => s.name.includes(route['기점'].substring(0,4)));
+  const toStop = STOPS.find(s => s.name.includes(route['종점'].substring(0,4)));
+
+  if (fromStop) {
+    const marker = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(fromStop.lat, fromStop.lng),
+      map: mapRoutes
+    });
+    routeMarkers.push(marker);
+  }
+  if (toStop) {
+    const marker = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(toStop.lat, toStop.lng),
+      map: mapRoutes
+    });
+    routeMarkers.push(marker);
+  }
+  if (fromStop && toStop) {
+    const bounds = new kakao.maps.LatLngBounds();
+    bounds.extend(new kakao.maps.LatLng(fromStop.lat, fromStop.lng));
+    bounds.extend(new kakao.maps.LatLng(toStop.lat, toStop.lng));
+    mapRoutes.setBounds(bounds);
+  }
+}
+
 // ==================== 고속·기차 ====================
 function initHubGrid() {
   const container = document.getElementById('hub-grid');
@@ -892,35 +1116,34 @@ function showHubDetail(idx) {
     </div>
   </div>`;
 
-  hub.destinations.forEach((dest, di) => {
-    const remainTimes = dest.times.filter(t => {
-      const [th, tm] = t.split(':').map(Number);
-      return th * 60 + tm >= nowMin;
+  // 기차: 상행/하행 탭으로 렌더링
+  if (hub.direction && hub.upward && hub.downward) {
+    html += `
+    <div style="display:flex;gap:0;margin:0 0 12px;border-bottom:2px solid #eee">
+      <button id="dir-up-btn" onclick="switchDirection('up','${hub.id}')"
+        style="flex:1;padding:10px;border:none;background:none;font-size:13px;font-weight:700;color:#1D9E75;border-bottom:2px solid #1D9E75;margin-bottom:-2px;cursor:pointer">
+        ↑ 상행 (서울·대전 방면)
+      </button>
+      <button id="dir-down-btn" onclick="switchDirection('down','${hub.id}')"
+        style="flex:1;padding:10px;border:none;background:none;font-size:13px;font-weight:500;color:#999;cursor:pointer">
+        ↓ 하행 (익산·군산 방면)
+      </button>
+    </div>
+    <div id="dir-up">`;
+    hub.upward.forEach((dest, di) => {
+      html += renderDestSection(dest, di, nowMin);
     });
-
-    html += `<div class="dest-section ${di === 0 ? 'featured' : ''}">`;
-    if (di === 0) {
-      html += `<div class="dest-header"><span class="dest-name">${dest.name}</span><span class="dest-duration">${dest.duration}</span></div>`;
-    } else {
-      html += `<div class="dest-header-plain"><span class="dest-name-plain">${dest.name}</span><span class="dest-duration" style="font-size:10px;color:#888">${dest.duration}</span></div>`;
-    }
-    html += `<div class="dest-body"><div class="dest-times">`;
-
-    if (remainTimes.length === 0) {
-      html += `<span class="dest-time" style="color:#ccc">오늘 운행 종료</span>`;
-    } else {
-      remainTimes.forEach((t, ti) => {
-        const isLast = t === dest.times[dest.times.length - 1];
-        html += `<span class="dest-time ${ti === 0 ? 'next' : ''} ${isLast ? 'last' : ''}">${t}${ti === 0 ? ' 출발' : ''}${isLast ? ' 막차' : ''}</span>`;
-      });
-    }
-
+    html += `</div>
+    <div id="dir-down" style="display:none">`;
+    hub.downward.forEach((dest, di) => {
+      html += renderDestSection(dest, di, nowMin);
+    });
     html += `</div>`;
-    if (di === 0 && dest.lastReturn) {
-      html += `<div class="return-box"><div class="return-box-label">복귀 막차</div><div class="return-box-value">${dest.lastReturn}</div></div>`;
-    }
-    html += `</div></div>`;
-  });
+  } else {
+    hub.destinations.forEach((dest, di) => {
+      html += renderDestSection(dest, di, nowMin);
+    });
+  }
 
   html += `<a class="book-link" href="${hub.bookUrl}" target="_blank">
     <span class="book-link-text">${hub.bookLabel}</span>
@@ -930,6 +1153,52 @@ function showHubDetail(idx) {
   <div style="height:16px"></div>`;
 
   detail.innerHTML = html;
+}
+
+function renderDestSection(dest, di, nowMin) {
+  const remainTimes = dest.times.filter(t => {
+    const [th, tm] = t.split(':').map(Number);
+    return th * 60 + tm >= nowMin;
+  });
+  let html = `<div class="dest-section ${di === 0 ? 'featured' : ''}">`;
+  if (di === 0) {
+    html += `<div class="dest-header"><span class="dest-name">${dest.name}</span><span class="dest-duration">${dest.duration}</span></div>`;
+  } else {
+    html += `<div class="dest-header-plain"><span class="dest-name-plain">${dest.name}</span><span class="dest-duration" style="font-size:10px;color:#888">${dest.duration}</span></div>`;
+  }
+  html += `<div class="dest-body"><div class="dest-times">`;
+  if (remainTimes.length === 0) {
+    html += `<span class="dest-time" style="color:#ccc">오늘 운행 종료</span>`;
+  } else {
+    remainTimes.forEach((t, ti) => {
+      const isLast = t === dest.times[dest.times.length - 1];
+      html += `<span class="dest-time ${ti === 0 ? 'next' : ''} ${isLast ? 'last' : ''}">${t}${ti === 0 ? ' 출발' : ''}${isLast ? ' 막차' : ''}</span>`;
+    });
+  }
+  html += `</div>`;
+  if (di === 0 && dest.lastReturn) {
+    html += `<div class="return-box"><div class="return-box-label">복귀 막차</div><div class="return-box-value">${dest.lastReturn}</div></div>`;
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+function switchDirection(dir, hubId) {
+  document.getElementById('dir-up').style.display = dir === 'up' ? 'block' : 'none';
+  document.getElementById('dir-down').style.display = dir === 'down' ? 'block' : 'none';
+  document.getElementById('dir-up-btn').style.color = dir === 'up' ? '#1D9E75' : '#999';
+  document.getElementById('dir-up-btn').style.borderBottom = dir === 'up' ? '2px solid #1D9E75' : 'none';
+  document.getElementById('dir-down-btn').style.color = dir === 'down' ? '#1D9E75' : '#999';
+  document.getElementById('dir-down-btn').style.borderBottom = dir === 'down' ? '2px solid #1D9E75' : 'none';
+}
+
+function transportBack() {
+  const detail = document.getElementById('hub-detail');
+  if (detail && detail.style.display !== 'none') {
+    closeHubDetail();
+  } else {
+    showScreen('home');
+  }
 }
 
 function closeHubDetail() {
