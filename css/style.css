@@ -245,6 +245,40 @@ html, body {
 }
 .badge-best { background: var(--green-light); color: var(--green-text); }
 .badge-transfer { background: #FFF3E0; color: #E65100; }
+.badge-alt { background: #f0f0f0; color: #888; }
+
+.best-label {
+  display: inline-block;
+  background: var(--green);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.result-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 10px 14px 4px;
+}
+
+.transfer-card { border-left: 3px solid #E65100; }
+
+.save-star-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #ccc;
+  cursor: pointer;
+  padding: 0 8px;
+  flex-shrink: 0;
+  line-height: 1;
+}
 
 .rc-route {
   display: flex;
@@ -385,6 +419,7 @@ html, body {
 }
 .sc-upcoming { background: var(--white); border: 1.5px solid #ccc; }
 .sc-end { background: var(--red); border: 1.5px solid var(--red); }
+.sc-skip { background: #eee; border: 1px dashed #ccc; width: 8px; height: 8px; }
 
 .stop-vline {
   width: 2px;
@@ -548,7 +583,7 @@ html, body {
   font-size: 11px;
   color: var(--gray-text);
   text-align: center;
-  padding: 8px;
+  padding: 4px 8px 8px;
 }
 
 .hub-detail {
