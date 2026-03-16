@@ -96,6 +96,10 @@ async function loadData() {
 }
 
 function loadKakaoMap() {
+  if (typeof kakao === 'undefined' || typeof kakao.maps === 'undefined') {
+    setTimeout(loadKakaoMap, 500);
+    return;
+  }
   kakao.maps.load(() => {
     initHomeMap();
   });
@@ -750,7 +754,65 @@ function renderLegend() {
 function showRouteTimetable(routeNum) {
   const route = ROUTES.find(r => r['번호'] === routeNum);
   if (!route) return;
-  alert(`${route['번호']}번 ${route['노선군']}\n\n기점: ${route['기점']}\n종점: ${route['종점']}\n거리: ${route['거리']}km\n\n평일 ${route['평일횟수']}회 운행\n첫차: ${route['첫차']} · 막차: ${route['막차']}\n\n경유: ${route['경유']}`);
+
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const dayType = getDayType();
+  const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+  const count = route[countKey] || 0;
+  const firstStr = route['첫차'];
+  const lastStr = route['막차'];
+
+  let timesHtml = '';
+  if (count > 0 && firstStr && lastStr) {
+    const [fh, fm] = firstStr.split(':').map(Number);
+    const [lh, lm] = lastStr.split(':').map(Number);
+    const firstMin = fh * 60 + fm;
+    const lastMin = lh * 60 + lm;
+    const interval = count > 1 ? Math.round((lastMin - firstMin) / (count - 1)) : 0;
+    const times = [];
+    for (let i = 0; i < count; i++) {
+      const t = firstMin + interval * i;
+      times.push(`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`);
+    }
+    timesHtml = times.map(t => {
+      const [th, tm] = t.split(':').map(Number);
+      const tMin = th * 60 + tm;
+      const passed = tMin < nowMin;
+      const isNext = !passed && times.find(tt => { const [a,b]=tt.split(':').map(Number); return a*60+b>=nowMin; }) === t;
+      return `<span class="tt-chip ${isNext?'next-dep':''} ${passed?'passed':''}" style="font-size:13px;padding:6px 10px">
+        <div class="tt-chip-time ${passed?'passed-time':''}">${t}</div>
+        <div class="tt-chip-lbl">${isNext?'다음':''}${t===lastStr?'막차':''}</div>
+      </span>`;
+    }).join('');
+  }
+
+  const panel = document.createElement('div');
+  panel.id = 'route-tt-panel';
+  panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,0.15);z-index:999;padding:16px;max-height:70vh;overflow-y:auto';
+  panel.innerHTML = `
+    <div style="width:40px;height:4px;background:#e0e0e0;border-radius:2px;margin:0 auto 16px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <span style="background:#1D9E75;color:#fff;border-radius:6px;padding:3px 10px;font-weight:600;font-size:15px">${route['번호']}번</span>
+        <span style="margin-left:8px;font-size:14px;color:#333">${route['노선군']}</span>
+      </div>
+      <button onclick="document.getElementById('route-tt-panel').remove();document.getElementById('route-tt-overlay').remove()" style="background:none;border:none;font-size:20px;color:#999;cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:13px;color:#666;margin-bottom:8px">${route['기점']} → ${route['종점']} · ${route['거리']}km</div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:12px">경유: ${route['경유']}</div>
+    <div style="font-size:12px;color:#888;margin-bottom:8px">오늘 시간표 (${dayType==='weekday'?'평일':dayType==='sat'?'토요일':'공휴일'} ${count}회) ※ 추정</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">${timesHtml}</div>
+    <div style="height:20px"></div>
+  `;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'route-tt-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:998';
+  overlay.onclick = () => { panel.remove(); overlay.remove(); };
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(panel);
 }
 
 function initRoutesMap() {
@@ -864,7 +926,8 @@ function showHubDetail(idx) {
     <span class="book-link-text">${hub.bookLabel}</span>
     <span class="book-link-arr">→</span>
   </a>
-  <div style="font-size:11px;color:#aaa;text-align:center;padding:10px 0 4px">※ 시간표는 참고용이며 실제와 다를 수 있습니다. 예매 전 반드시 확인하세요.</div>`;
+  <div style="font-size:11px;color:#aaa;text-align:center;padding:10px 0 4px">※ 시간표는 참고용이며 실제와 다를 수 있습니다. 예매 전 반드시 확인하세요.</div>
+  <div style="height:16px"></div>`;
 
   detail.innerHTML = html;
 }

@@ -105,8 +105,11 @@
   <!-- ==================== 노선도 화면 ==================== -->
   <div id="screen-routes" class="screen">
     <div class="page-header green">
-      <div class="page-title">서천 버스 노선도</div>
-      <div class="page-sub">권역 선택 → 노선 선택 → 시간표</div>
+      <button class="back-btn" onclick="showScreen('home')">‹</button>
+      <div>
+        <div class="page-title">서천 버스 노선도</div>
+        <div class="page-sub">권역 선택 → 노선 선택 → 시간표</div>
+      </div>
     </div>
     <div class="zone-tabs" id="zone-tabs"></div>
     <div id="map-routes" class="map-container" style="height:200px"></div>
@@ -117,8 +120,11 @@
   <!-- ==================== 고속·기차 화면 ==================== -->
   <div id="screen-transport" class="screen">
     <div class="page-header green">
-      <div class="page-title">고속버스 · 기차</div>
-      <div class="page-sub">현위치 기준 터미널·역 선택</div>
+      <button class="back-btn" onclick="showScreen('home')">‹</button>
+      <div>
+        <div class="page-title">고속버스 · 기차</div>
+        <div class="page-sub">터미널·역 선택</div>
+      </div>
     </div>
     <div class="hub-grid" id="hub-grid"></div>
     <div class="hub-detail" id="hub-detail" style="display:none"></div>
@@ -127,8 +133,11 @@
   <!-- ==================== 즐겨찾기 화면 ==================== -->
   <div id="screen-favorites" class="screen">
     <div class="page-header green">
-      <div class="page-title">즐겨찾기</div>
-      <div class="page-sub">탭하면 홈에서 바로 검색</div>
+      <button class="back-btn" onclick="showScreen('home')">‹</button>
+      <div>
+        <div class="page-title">즐겨찾기</div>
+        <div class="page-sub">탭하면 홈에서 바로 검색</div>
+      </div>
     </div>
     <div id="favorites-body"></div>
   </div>
