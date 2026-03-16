@@ -1057,14 +1057,17 @@ function initHubGrid() {
   HUBS.forEach((hub, i) => {
     const isNearest = i === 0;
     const dist = isNearest ? '도보 8분' : i === 1 ? '차 12분' : i === 2 ? '차 18분' : '차 20분';
-    const nextDest = hub.destinations[0];
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
+
+    // 기차(상행/하행) vs 버스(destinations) 구분
+    const destList = hub.direction ? hub.upward : hub.destinations;
+    const nextDest = destList[0];
     const nextTime = nextDest.times.find(t => {
       const [th, tm] = t.split(':').map(Number);
       return th * 60 + tm >= nowMin;
     }) || '운행종료';
-    const nextDest2 = hub.destinations.length > 1 ? hub.destinations[1] : null;
+    const nextDest2 = destList.length > 1 ? destList[1] : null;
     const nextTime2 = nextDest2 ? (nextDest2.times.find(t => {
       const [th,tm] = t.split(':').map(Number); return th*60+tm >= nowMin;
     }) || '') : '';
