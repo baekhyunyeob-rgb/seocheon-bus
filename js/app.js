@@ -87,6 +87,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   initHubGrid();
   initFavorites();
   loadKakaoMap();
+
+  // 초기 history 상태 설정
+  history.replaceState({ screen: 'home' }, '', '');
+
+  // 폰 뒤로가기 처리
+  window.addEventListener('popstate', (e) => {
+    const screen = e.state?.screen || 'home';
+    if (screen === 'home') {
+      // 홈이면 그냥 앱 종료 허용 (브라우저 기본 동작)
+      if (currentScreen !== 'home') {
+        showScreenNoHistory('home');
+        history.replaceState({ screen: 'home' }, '', '');
+      }
+    } else {
+      showScreenNoHistory(screen);
+    }
+  });
 });
 
 async function loadData() {
@@ -99,10 +116,79 @@ async function loadData() {
   }
   try {
     const res = await fetch('data/stops.json');
-    STOPS = await res.json();
+    const raw = await res.json();
+    STOPS = buildDisplayNames(raw); // 원본 불변, 메모리에서 구분명 계산
   } catch(e) {
     console.warn('stops.json 로드 실패');
   }
+}
+
+// 원본 데이터를 수정하지 않고 메모리에서 displayName 계산
+function buildDisplayNames(stops) {
+  const CENTERS = {
+    '서천읍': [36.0758, 126.6908],
+    '장항읍': [36.0197, 126.6996],
+    '한산면': [36.1132, 126.7803],
+    '판교면': [36.1489, 126.8303],
+    '마서면': [36.0631, 126.7074],
+    '비인면': [36.0170, 126.5923],
+    '서면':   [36.0380, 126.5761],
+    '종천면': [36.0897, 126.6433],
+    '기산면': [36.1053, 126.7442],
+    '문산면': [36.0542, 126.8108],
+    '화양면': [36.0925, 126.8492],
+    '시초면': [36.1308, 126.7197],
+  };
+  const SEOCHEON = [36.0758, 126.6908];
+
+  function dist(a, b) {
+    return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2);
+  }
+  function nearestRegion(lat, lng) {
+    let best = '서천읍', bestD = 999;
+    for (const [name, c] of Object.entries(CENTERS)) {
+      const d = dist([lat, lng], c);
+      if (d < bestD) { bestD = d; best = name; }
+    }
+    return best;
+  }
+
+  // 이름별 그룹
+  const groups = {};
+  stops.forEach((s, i) => {
+    if (!groups[s.name]) groups[s.name] = [];
+    groups[s.name].push(i);
+  });
+
+  // 원본 복사 후 displayName 추가
+  const result = stops.map(s => ({ ...s }));
+
+  for (const [name, idxs] of Object.entries(groups)) {
+    if (idxs.length < 2) continue;
+    const group = idxs.map(i => stops[i]);
+    const regions = group.map(s => nearestRegion(s.lat, s.lng));
+
+    if (new Set(regions).size > 1) {
+      // 읍면이 다른 경우: (서천읍), (한산면) 등
+      idxs.forEach((idx, j) => {
+        result[idx].displayName = `${name}(${regions[j]})`;
+      });
+    } else {
+      // 같은 읍면 내 양방향: 서천읍 중심 기준 내향/외향
+      const dists = group.map(s => dist([s.lat, s.lng], SEOCHEON));
+      const sorted = [...idxs].sort((a, b) =>
+        dists[idxs.indexOf(a)] - dists[idxs.indexOf(b)]
+      );
+      result[sorted[0]].displayName = `${name}(내향)`;
+      result[sorted[1]].displayName = `${name}(외향)`;
+      // 3개 이상이면 번호 부여
+      for (let k = 2; k < sorted.length; k++) {
+        result[sorted[k]].displayName = `${name}(${k+1})`;
+      }
+    }
+  }
+
+  return result;
 }
 
 function loadKakaoMap() {
@@ -136,17 +222,60 @@ function initLocation() {
 function initHomeMap() {
   const container = document.getElementById('map-home');
   if (!container) return;
-  const options = {
+  mapHome = new kakao.maps.Map(container, {
     center: new kakao.maps.LatLng(myLocation.lat, myLocation.lng),
     level: 8
-  };
-  mapHome = new kakao.maps.Map(container, options);
-
-  // 줌 컨트롤
+  });
   mapHome.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
-
-  // 내 위치 마커
   addMyMarker(mapHome, new kakao.maps.LatLng(myLocation.lat, myLocation.lng));
+
+  // 확대 시 정류장 표시 (레벨 7 이하)
+  let stopOverlays = [];
+  let lastLevel = 8;
+
+  kakao.maps.event.addListener(mapHome, 'zoom_changed', () => {
+    const level = mapHome.getLevel();
+    if (level <= 6 && lastLevel > 6) {
+      // 현재 지도 범위 내 정류장만 표시
+      showNearbyStops();
+    } else if (level > 6 && stopOverlays.length > 0) {
+      stopOverlays.forEach(o => o.setMap(null));
+      stopOverlays = [];
+    }
+    lastLevel = level;
+  });
+
+  function showNearbyStops() {
+    stopOverlays.forEach(o => o.setMap(null));
+    stopOverlays = [];
+    const bounds = mapHome.getBounds();
+    const visible = STOPS.filter(s =>
+      s.lat >= bounds.getSouthWest().getLat() &&
+      s.lat <= bounds.getNorthEast().getLat() &&
+      s.lng >= bounds.getSouthWest().getLng() &&
+      s.lng <= bounds.getNorthEast().getLng()
+    ).slice(0, 150);
+
+    visible.forEach(s => {
+      const display = s.displayName || s.name;
+      const overlay = new kakao.maps.CustomOverlay({
+        position: new kakao.maps.LatLng(s.lat, s.lng),
+        content: `<div style="display:flex;flex-direction:column;align-items:center;cursor:pointer" onclick="selectPlace('to',{name:'${s.name.replace(/'/g,"\\'")}',displayName:'${display.replace(/'/g,"\\'")}',lat:${s.lat},lng:${s.lng}})">
+          <div style="background:#fff;border:1.5px solid #1D9E75;border-radius:4px;padding:1px 5px;font-size:10px;color:#1D9E75;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.15)">${display}</div>
+          <div style="width:8px;height:8px;background:#1D9E75;border:2px solid #fff;border-radius:50%;margin-top:2px;box-shadow:0 1px 2px rgba(0,0,0,.2)"></div>
+        </div>`,
+        yAnchor: 1.3,
+        zIndex: 3
+      });
+      overlay.setMap(mapHome);
+      stopOverlays.push(overlay);
+    });
+  }
+
+  // 이동 후에도 재렌더
+  kakao.maps.event.addListener(mapHome, 'dragend', () => {
+    if (mapHome.getLevel() <= 6) showNearbyStops();
+  });
 }
 
 function addMyMarker(map, latlng) {
@@ -182,6 +311,29 @@ function showScreen(name) {
   if (name === 'routes' && !mapRoutes) {
     setTimeout(() => initRoutesMap(), 100);
   }
+  if (name === 'favorites') renderFavorites();
+
+  // 홈이 아닌 화면으로 이동 시 history에 추가
+  if (name !== 'home') {
+    history.pushState({ screen: name }, '', '');
+  } else {
+    history.replaceState({ screen: 'home' }, '', '');
+  }
+}
+
+// history 조작 없이 화면만 전환 (popstate 핸들러에서 사용)
+function showScreenNoHistory(name) {
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = 'none';
+  });
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const screen = document.getElementById('screen-' + name);
+  if (screen) { screen.style.display = 'flex'; screen.classList.add('active'); }
+  const tab = document.getElementById('tab-' + name);
+  if (tab) tab.classList.add('active');
+  currentScreen = name;
+  if (name === 'routes' && !mapRoutes) setTimeout(() => initRoutesMap(), 100);
   if (name === 'favorites') renderFavorites();
 }
 
@@ -277,16 +429,23 @@ function onPlaceInput(val) {
   }
 
   container.innerHTML = '<div class="modal-section-label">정류장 검색결과</div>' +
-    results.map(s => `
+    results.map(s => {
+      const display = s.displayName || s.name;
+      const isDiff = display !== s.name;
+      return `
     <div class="modal-item" style="display:flex;align-items:center">
-      <div style="flex:1;display:flex;align-items:center;gap:8px" onclick="selectPlace('${placeSearchTarget}', {name:'${s.name}', lat:${s.lat}, lng:${s.lng}})">
+      <div style="flex:1;display:flex;align-items:center;gap:8px" onclick="selectPlace('${placeSearchTarget}', {name:'${s.name}', displayName:'${display}', lat:${s.lat}, lng:${s.lng}})">
         <div class="modal-item-icon">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#1D9E75"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
         </div>
-        <div class="modal-item-name">${s.name}</div>
+        <div>
+          <div class="modal-item-name">${display}</div>
+          ${isDiff ? `<div style="font-size:10px;color:#bbb">${s.name}</div>` : ''}
+        </div>
       </div>
-      <button onclick="savePlace({name:'${s.name}',lat:${s.lat},lng:${s.lng}})" style="background:none;border:1px solid #ddd;border-radius:6px;padding:3px 8px;font-size:10px;color:#888;cursor:pointer;flex-shrink:0">저장</button>
-    </div>`).join('');
+      <button onclick="savePlace({name:'${s.name}',displayName:'${display}',lat:${s.lat},lng:${s.lng}})" style="background:none;border:1px solid #ddd;border-radius:6px;padding:3px 8px;font-size:10px;color:#888;cursor:pointer;flex-shrink:0">저장</button>
+    </div>`;
+    }).join('');
 }
 
 function savePlace(place) {
@@ -300,33 +459,27 @@ function savePlace(place) {
 
 function selectPlace(target, place) {
   searchState[target] = place;
+  const label = place.displayName || place.name;
 
   if (target === 'from') {
     const textEl = document.getElementById('text-from');
     const tagEl = document.getElementById('tag-from');
-    textEl.textContent = place.name;
+    textEl.textContent = label;
     textEl.classList.remove('loc-placeholder');
-    if (place.isGps) {
-      tagEl.style.display = '';
-    } else {
-      tagEl.style.display = 'none';
-    }
-    if (mapHome && !place.isGps) {
-      mapHome.panTo(new kakao.maps.LatLng(place.lat, place.lng));
-      updateHomeMarkers();
-    }
+    if (place.isGps) { tagEl.style.display = ''; }
+    else { tagEl.style.display = 'none'; }
+    if (mapHome && !place.isGps) { mapHome.panTo(new kakao.maps.LatLng(place.lat, place.lng)); updateHomeMarkers(); }
   } else if (target === 'via') {
     const el = document.getElementById('text-via');
-    el.textContent = place.name;
+    el.textContent = label;
     el.classList.remove('loc-placeholder');
   } else if (target === 'to') {
     const el = document.getElementById('text-to');
-    el.textContent = place.name;
+    el.textContent = label;
     el.classList.remove('loc-placeholder');
-    if (mapHome) {
-      mapHome.panTo(new kakao.maps.LatLng(place.lat, place.lng));
-      updateHomeMarkers();
-    }
+    const btn = document.getElementById('save-star-btn');
+    if (btn) { btn.textContent = '☆'; btn.style.color = ''; }
+    if (mapHome) { mapHome.panTo(new kakao.maps.LatLng(place.lat, place.lng)); updateHomeMarkers(); }
   }
 
   // 검색 기록 저장
