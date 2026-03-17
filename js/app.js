@@ -865,63 +865,65 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     });
   });
 
-  // 환승 탐색 (직행 없을 때, 허브 좌표 기반)
-  if (results.length === 0) {
-    const HUBS_LIST = [
-      '서천터미널', '장항터미널', '한산공용터미널',
-      '서천역', '장항읍내', '판교', '기산', '문산',
-      '화양', '비인', '마산', '시초', '광암', '구동입구'
-    ];
+  // 환승 탐색 (직행과 무관하게 항상 탐색)
+  const HUBS_LIST = [
+    '서천터미널', '장항터미널', '한산공용터미널',
+    '서천역', '장항읍내', '판교', '기산', '문산',
+    '화양', '비인', '마산', '시초', '광암', '구동입구'
+  ];
 
-    for (const hub of HUBS_LIST) {
-      // 허브 좌표 찾기
-      const hubStop = STOPS.find(s => s.name.includes(hub.substring(0,3)));
-      if (!hubStop) continue;
-      const hubLat = hubStop.lat, hubLng = hubStop.lng;
+  for (const hub of HUBS_LIST) {
+    const hubStop = STOPS.find(s => s.name.includes(hub.substring(0,3)));
+    if (!hubStop) continue;
+    const hubLat = hubStop.lat, hubLng = hubStop.lng;
 
-      // 1구간: from → hub
-      const leg1Routes = ROUTES.filter(r => {
-        const coords = getRouteCoords(r);
-        const hi = findCoordIdx(coords, hubLat, hubLng);
-        if (hi === -1) return false;
-        if (!fromLat) return true; // GPS 없으면 모든 허브 도착 노선
-        const fi = findCoordIdx(coords, fromLat, fromLng);
-        return (isGps || fi !== -1) && (fi === -1 || fi < hi);
+    const leg1Routes = ROUTES.filter(r => {
+      const coords = getRouteCoords(r);
+      const hi = findCoordIdx(coords, hubLat, hubLng);
+      if (hi === -1) return false;
+      if (!fromLat) return true;
+      const fi = findCoordIdx(coords, fromLat, fromLng);
+      return (isGps || fi !== -1) && (fi === -1 || fi < hi);
+    });
+
+    const leg2Routes = ROUTES.filter(r => {
+      const coords = getRouteCoords(r);
+      const hi = findCoordIdx(coords, hubLat, hubLng);
+      const ti = findCoordIdx(coords, toLat, toLng);
+      return hi !== -1 && ti !== -1 && hi < ti;
+    });
+
+    if (leg1Routes.length > 0 && leg2Routes.length > 0) {
+      const r1 = leg1Routes[0];
+      const r2 = leg2Routes[0];
+      // 이미 같은 조합이 있으면 스킵
+      const isDup = results.some(res =>
+        res.isTransfer &&
+        res.route['번호'] === r1['번호'] &&
+        res.route2['번호'] === r2['번호']
+      );
+      if (isDup) continue;
+
+      const bus1 = getNextBus(r1, searchTime, dayType);
+      if (!bus1) continue;
+      const [h, m] = bus1.split(':').map(Number);
+      const transferTime = new Date(searchTime);
+      transferTime.setHours(h, m + 30, 0);
+      const bus2 = getNextBus(r2, transferTime, dayType);
+      if (!bus2) continue;
+
+      results.push({
+        route: r1, route2: r2,
+        stops: getRouteStops(r1),
+        stops2: getRouteStops(r2),
+        nextBus: bus1, nextBus2: bus2,
+        transferHub: hub,
+        transferCount: 1,
+        minutes: estimateMinutes((r1['거리']||0) + (r2['거리']||0)) + 15,
+        distanceKm: (r1['거리']||0) + (r2['거리']||0),
+        dayType,
+        isTransfer: true
       });
-
-      // 2구간: hub → to
-      const leg2Routes = ROUTES.filter(r => {
-        const coords = getRouteCoords(r);
-        const hi = findCoordIdx(coords, hubLat, hubLng);
-        const ti = findCoordIdx(coords, toLat, toLng);
-        return hi !== -1 && ti !== -1 && hi < ti;
-      });
-
-      if (leg1Routes.length > 0 && leg2Routes.length > 0) {
-        const r1 = leg1Routes[0];
-        const r2 = leg2Routes[0];
-        const bus1 = getNextBus(r1, searchTime, dayType);
-        if (!bus1) continue;
-        const [h, m] = bus1.split(':').map(Number);
-        const transferTime = new Date(searchTime);
-        transferTime.setHours(h, m + 30, 0);
-        const bus2 = getNextBus(r2, transferTime, dayType);
-        if (!bus2) continue;
-
-        results.push({
-          route: r1, route2: r2,
-          stops: getRouteStops(r1),
-          stops2: getRouteStops(r2),
-          nextBus: bus1, nextBus2: bus2,
-          transferHub: hub,
-          transferCount: 1,
-          minutes: estimateMinutes((r1['거리']||0) + (r2['거리']||0)) + 15,
-          distanceKm: (r1['거리']||0) + (r2['거리']||0),
-          dayType,
-          isTransfer: true
-        });
-        if (results.length >= 3) break; // 최대 3개 환승 경로
-      }
     }
   }
 
@@ -1181,7 +1183,7 @@ function getRouteLineSummary(r) {
   parts.push(`<span style="font-weight:700;color:#333">${alightName}</span>`);
   if (dest !== alightName) parts.push(`<span style="color:#aaa;font-size:11px">${dest}</span>`);
 
-  return parts.join(`<span style="color:#ddd;margin:0 3px">›</span>`);
+  return parts.join(`<span style="color:#999;margin:0 2px;font-size:11px">→</span>`);
 }
 
 function makeTimesRow(route, boardTime, dayType) {
@@ -1202,20 +1204,22 @@ function makeTimesRow(route, boardTime, dayType) {
     times.push(String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'));
   }
 
-  const chips = times.map(t => {
+  // 지난 시간 제외
+  const upcoming = times.filter(t => {
     const [th,tm] = t.split(':').map(Number);
-    const passed = th*60+tm < nowMin;
+    return th*60+tm >= nowMin;
+  });
+  if (upcoming.length === 0) return '';
+
+  const chips = upcoming.map(t => {
     const isNext = t === boardTime;
-    return `<div class="tt-chip ${isNext?'next-dep':''} ${passed?'passed':''}" style="min-width:40px">
-      <div class="tt-chip-time ${passed?'passed-time':''}">${t}</div>
+    return `<div class="tt-chip ${isNext?'next-dep':''}" style="min-width:40px">
+      <div class="tt-chip-time">${t}</div>
       <div class="tt-chip-lbl">${isNext?'다음':t===lastStr?'막차':''}</div>
     </div>`;
   }).join('');
 
-  return `<div style="margin-top:8px">
-    <div style="font-size:11px;color:#aaa;margin-bottom:4px">이후</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">${chips}</div>
-  </div>`;
+  return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px">${chips}</div>`;
 }
 
 function renderRouteCard(r, idx, isBest, dayType) {
@@ -1231,9 +1235,9 @@ function renderRouteCard(r, idx, isBest, dayType) {
     return `<div class="route-card transfer-card" onclick="showDetail(${idx})">
       <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;flex-wrap:wrap">
         <span class="bus-pill" style="background:${zoneColor}">${r.route['번호']}번</span>
-        <span style="color:#ddd;font-size:12px">›</span>
+        <span style="color:#999;font-size:12px">→</span>
         <span style="color:#888;font-size:12px">${r.transferHub}</span>
-        <span style="color:#ddd;font-size:12px">›</span>
+        <span style="color:#999;font-size:12px">→</span>
         <span class="bus-pill" style="background:${zoneColor2}">${r.route2['번호']}번</span>
         <span class="rc-badge badge-transfer" style="margin-left:auto">1회 환승</span>
       </div>
@@ -1256,12 +1260,12 @@ function renderRouteCard(r, idx, isBest, dayType) {
     <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;flex-wrap:wrap">
       <span class="bus-pill" style="background:${zoneColor}">${r.route['번호']}번</span>
       ${isOutside ? '<span class="rc-badge" style="background:#FFF3E0;color:#E65100;font-size:10px">광역</span>' : ''}
-      <span style="font-size:12px;color:#555">${lineSummary}</span>
+      <span style="font-size:11px;color:#666">${lineSummary}</span>
     </div>
     <div style="font-size:13px;color:#333">
       <span style="color:#185FA5;font-weight:700">${boardTime}</span>
       <span style="color:#aaa;font-size:11px"> 탑승</span>
-      <span style="margin:0 4px;color:#ccc">›</span>
+      <span style="margin:0 4px;color:#999">→</span>
       <span style="color:#E24B4A;font-weight:700">${arriveTime}</span>
       <span style="color:#aaa;font-size:11px"> 도착</span>
       <span style="color:#aaa;font-size:11px;float:right">${r.minutes}분 소요</span>
@@ -1269,7 +1273,6 @@ function renderRouteCard(r, idx, isBest, dayType) {
     ${timesRow}
   </div>`;
 }
-
 function buildTimetableHtml(route, nextBus, dayType, accentColor) {
   const color = accentColor || '#1D9E75';
   const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
@@ -1294,10 +1297,10 @@ function buildTimetableHtml(route, nextBus, dayType, accentColor) {
   times.forEach(t => {
     const [th, tm] = t.split(':').map(Number);
     const tMin = th * 60 + tm;
-    const isPassed = tMin < nowMin;
+    if (tMin < nowMin) return; // 지난 시간 제외
     const isNext = nextBus ? t === nextBus : false;
-    chipsHtml += `<div class="tt-chip ${isNext ? 'next-dep' : ''} ${isPassed ? 'passed' : ''}">
-      <div class="tt-chip-time ${isPassed ? 'passed-time' : ''}">${t}</div>
+    chipsHtml += `<div class="tt-chip ${isNext ? 'next-dep' : ''}">
+      <div class="tt-chip-time">${t}</div>
       <div class="tt-chip-lbl">${isNext ? '다음' : t === lastStr ? '막차' : ''}</div>
     </div>`;
   });
