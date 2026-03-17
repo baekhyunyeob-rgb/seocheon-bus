@@ -3,6 +3,7 @@
 // ==================== 데이터 ====================
 let ROUTES = [];
 let STOPS = [];
+let ROUTE_COORDS = new Map(); // 노선별 경유지 좌표 캐시
 let mapHome = null, mapDetail = null, mapRoutes = null;
 let currentScreen = 'home';
 let searchState = { from: null, to: null, via: null, time: null, timeMode: 'now' };
@@ -110,24 +111,88 @@ async function loadData() {
   try {
     const res = await fetch('data/routes.json');
     const all = await res.json();
-    // 타시도 노선도 서천 경유 구간은 포함 (보령↔비인·판교, 군산↔장항·서천, 부여↔한산)
     const SEOCHEON_HUBS = ['서천','장항','한산','비인','판교','기산','문산','화양','마서'];
     ROUTES = all.filter(r => {
       if (!r['노선군'].includes('타시도')) return true;
-      // 타시도 노선 중 서천 지역 정류장을 경유하는 경우 포함
       const text = r['기점'] + r['종점'] + r['경유'];
       return SEOCHEON_HUBS.some(h => text.includes(h));
     });
   } catch(e) {
-    console.warn('routes.json 로드 실패, 내장 데이터 사용');
+    console.warn('routes.json 로드 실패');
   }
   try {
     const res = await fetch('data/stops.json');
     const raw = await res.json();
-    STOPS = buildDisplayNames(raw); // 원본 불변, 메모리에서 구분명 계산
+    STOPS = buildDisplayNames(raw);
+    buildRouteCoords(); // 경유지 좌표 사전 구축
   } catch(e) {
     console.warn('stops.json 로드 실패');
   }
+}
+
+// 경유지 이름 → 좌표 사전 구축 (앱 로드 시 1회)
+function buildRouteCoords() {
+  // stops에서 이름 키워드로 빠르게 찾는 인덱스 생성
+  const stopIndex = new Map();
+  STOPS.forEach(s => {
+    // 2글자 이상 키워드별로 인덱싱
+    const keys = s.name.replace(/[().·]/g,' ').split(/[\s,]+/).filter(k => k.length >= 2);
+    keys.forEach(k => {
+      if (!stopIndex.has(k)) stopIndex.set(k, []);
+      stopIndex.get(k).push(s);
+    });
+  });
+
+  function findCoordByName(name) {
+    const clean = name.replace(/[()↔→]/g,' ').trim();
+    const keys = clean.split(/[\s.·]+/).filter(k => k.length >= 2);
+
+    let best = null, bestScore = 0;
+    for (const key of keys) {
+      const candidates = stopIndex.get(key) || [];
+      for (const s of candidates) {
+        // 이름 유사도 점수 (공통 문자 비율)
+        const score = key.length / Math.max(clean.length, s.name.length);
+        if (score > bestScore) {
+          bestScore = score;
+          best = s;
+        }
+      }
+    }
+    return best;
+  }
+
+  ROUTES.forEach(route => {
+    const via = route['경유'] || '';
+    const names = [route['기점']];
+    via.replace(/[()]/g,'').split(/[→↔,]/).forEach(s => { const t = s.trim(); if (t) names.push(t); });
+    names.push(route['종점']);
+
+    const coords = names.map(name => {
+      const found = findCoordByName(name);
+      return found ? { name, lat: found.lat, lng: found.lng } : { name, lat: null, lng: null };
+    });
+
+    // 좌표 없는 정류장은 앞뒤 정류장 좌표로 보간
+    for (let i = 0; i < coords.length; i++) {
+      if (!coords[i].lat) {
+        const prev = coords.slice(0, i).reverse().find(c => c.lat);
+        const next = coords.slice(i+1).find(c => c.lat);
+        if (prev && next) {
+          coords[i].lat = (prev.lat + next.lat) / 2;
+          coords[i].lng = (prev.lng + next.lng) / 2;
+        } else if (prev) {
+          coords[i].lat = prev.lat; coords[i].lng = prev.lng;
+        } else if (next) {
+          coords[i].lat = next.lat; coords[i].lng = next.lng;
+        }
+      }
+    }
+
+    ROUTE_COORDS.set(route['번호'] + '_' + route['기점'], coords);
+  });
+
+  console.log(`경유지 좌표 사전 구축 완료: ${ROUTE_COORDS.size}개 노선`);
 }
 
 // 원본 데이터를 수정하지 않고 메모리에서 displayName 계산
@@ -692,29 +757,72 @@ function getDayType() {
   return 'weekday';
 }
 
+// 두 좌표간 거리(m) 계산
+function coordDist(lat1, lng1, lat2, lng2) {
+  return Math.sqrt((lat1-lat2)**2 + (lng1-lng2)**2) * 111000;
+}
+
+// 노선의 좌표 배열 가져오기 (캐시 사용)
+function getRouteCoords(route) {
+  const key = route['번호'] + '_' + route['기점'];
+  return ROUTE_COORDS.get(key) || [];
+}
+
+// 좌표 기반: 특정 좌표가 노선 경유지 중 어느 인덱스에 해당하는지 (1500m 이내)
+function findCoordIdx(coords, lat, lng, thresholdM = 1500) {
+  let bestIdx = -1, bestDist = thresholdM;
+  coords.forEach((c, i) => {
+    if (!c.lat) return;
+    const d = coordDist(c.lat, c.lng, lat, lng);
+    if (d < bestDist) { bestDist = d; bestIdx = i; }
+  });
+  return bestIdx;
+}
+
 function findRoutes(fromName, toName, searchTime, dayType) {
   const results = [];
 
-  // 현위치인 경우 GPS 좌표로 가장 가까운 정류장 찾기
-  let fromKey = fromName;
-  if (fromName === '현위치' || searchState.from?.isGps) {
-    const nearest = STOPS.map(s => ({
-      ...s,
-      dist: Math.sqrt((s.lat - myLocation.lat)**2 + (s.lng - myLocation.lng)**2)
-    })).sort((a,b) => a.dist - b.dist)[0];
-    fromKey = nearest ? nearest.name.substring(0,4) : '서천터미널';
-  }
-
+  // 출발지 좌표 결정
+  let fromLat, fromLng;
   const isGps = fromName === '현위치' || searchState.from?.isGps;
 
-  // 직행 탐색
-  ROUTES.forEach(route => {
-    const stops = getRouteStops(route);
-    const fromIdx = stops.findIndex(s => s.includes(fromKey));
-    const toIdx = stops.findIndex(s => s.includes(toName));
+  if (isGps) {
+    fromLat = myLocation.lat;
+    fromLng = myLocation.lng;
+  } else if (searchState.from?.lat) {
+    fromLat = searchState.from.lat;
+    fromLng = searchState.from.lng;
+  } else {
+    // 이름으로 stops에서 좌표 찾기 (fallback)
+    const s = STOPS.find(s => s.name.includes(fromName.substring(0,4)));
+    if (s) { fromLat = s.lat; fromLng = s.lng; }
+  }
 
+  // 도착지 좌표 결정
+  let toLat, toLng;
+  if (searchState.to?.lat) {
+    toLat = searchState.to.lat;
+    toLng = searchState.to.lng;
+  } else {
+    const s = STOPS.find(s => s.name.includes(toName.substring(0,4)));
+    if (s) { toLat = s.lat; toLng = s.lng; }
+  }
+
+  if (!toLat) return results; // 도착지 좌표 없으면 검색 불가
+
+  // 직행 탐색 (좌표 기반)
+  ROUTES.forEach(route => {
+    const coords = getRouteCoords(route);
+    if (!coords.length) return;
+
+    const toIdx = findCoordIdx(coords, toLat, toLng);
     if (toIdx === -1) return;
-    // 출발지가 GPS이면 fromIdx 무시, 아니면 반드시 경유지에 있어야 함
+
+    let fromIdx = -1;
+    if (fromLat) {
+      fromIdx = findCoordIdx(coords, fromLat, fromLng);
+    }
+
     if (!isGps && fromIdx === -1) return;
     if (fromIdx !== -1 && fromIdx >= toIdx) return;
 
@@ -722,48 +830,60 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     if (!nextBus) return;
 
     results.push({
-      route, stops, nextBus,
+      route,
+      stops: getRouteStops(route),
+      coords,
+      nextBus,
       transferCount: 0,
       minutes: estimateMinutes(route['거리'] || 0),
       distanceKm: route['거리'] || 0,
-      dayType, isTransfer: false
+      dayType,
+      isTransfer: false
     });
   });
 
-  // 환승 탐색 (직행 결과 없을 때)
+  // 환승 탐색 (직행 없을 때, 허브 좌표 기반)
   if (results.length === 0) {
-    // 데이터 기반 허브: 10회 이상 경유되는 주요 정류장 자동 포함
     const HUBS_LIST = [
       '서천터미널', '장항터미널', '한산공용터미널',
       '서천역', '장항읍내', '판교', '기산', '문산',
       '화양', '비인', '마산', '시초', '광암', '구동입구'
     ];
-    HUBS_LIST.forEach(hub => {
+
+    for (const hub of HUBS_LIST) {
+      // 허브 좌표 찾기
+      const hubStop = STOPS.find(s => s.name.includes(hub.substring(0,3)));
+      if (!hubStop) continue;
+      const hubLat = hubStop.lat, hubLng = hubStop.lng;
+
       // 1구간: from → hub
       const leg1Routes = ROUTES.filter(r => {
-        const stops = getRouteStops(r);
-        const fi = stops.findIndex(s => s.includes(fromKey));
-        const ti = stops.findIndex(s => s.includes(hub));
-        return ti !== -1 && (isGps || fi !== -1) && (fi === -1 || fi < ti);
+        const coords = getRouteCoords(r);
+        const hi = findCoordIdx(coords, hubLat, hubLng);
+        if (hi === -1) return false;
+        if (!fromLat) return true; // GPS 없으면 모든 허브 도착 노선
+        const fi = findCoordIdx(coords, fromLat, fromLng);
+        return (isGps || fi !== -1) && (fi === -1 || fi < hi);
       });
+
       // 2구간: hub → to
       const leg2Routes = ROUTES.filter(r => {
-        const stops = getRouteStops(r);
-        const fi = stops.findIndex(s => s.includes(hub));
-        const ti = stops.findIndex(s => s.includes(toName));
-        return fi !== -1 && ti !== -1 && fi < ti;
+        const coords = getRouteCoords(r);
+        const hi = findCoordIdx(coords, hubLat, hubLng);
+        const ti = findCoordIdx(coords, toLat, toLng);
+        return hi !== -1 && ti !== -1 && hi < ti;
       });
 
       if (leg1Routes.length > 0 && leg2Routes.length > 0) {
         const r1 = leg1Routes[0];
         const r2 = leg2Routes[0];
         const bus1 = getNextBus(r1, searchTime, dayType);
-        if (!bus1) return;
+        if (!bus1) continue;
         const [h, m] = bus1.split(':').map(Number);
         const transferTime = new Date(searchTime);
         transferTime.setHours(h, m + 30, 0);
         const bus2 = getNextBus(r2, transferTime, dayType);
-        if (!bus2) return;
+        if (!bus2) continue;
 
         results.push({
           route: r1, route2: r2,
@@ -774,10 +894,12 @@ function findRoutes(fromName, toName, searchTime, dayType) {
           transferCount: 1,
           minutes: estimateMinutes((r1['거리']||0) + (r2['거리']||0)) + 15,
           distanceKm: (r1['거리']||0) + (r2['거리']||0),
-          dayType, isTransfer: true
+          dayType,
+          isTransfer: true
         });
+        if (results.length >= 3) break; // 최대 3개 환승 경로
       }
-    });
+    }
   }
 
   results.sort((a, b) => a.minutes - b.minutes);
