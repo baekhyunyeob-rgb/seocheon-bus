@@ -865,18 +865,21 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     });
   });
 
-  // 환승 탐색 (직행과 무관하게 항상 탐색)
+  // 환승 탐색 - 2구간 각 출발시간 기준, 그 전에 환승지 도착 가능한 1구간 버스만 표시
   const HUBS_LIST = [
     '서천터미널', '장항터미널', '한산공용터미널',
     '서천역', '장항읍내', '판교', '기산', '문산',
     '화양', '비인', '마산', '시초', '광암', '구동입구'
   ];
+  const countKeyT = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+  const nowMin = new Date().getHours()*60 + new Date().getMinutes();
 
   for (const hub of HUBS_LIST) {
     const hubStop = STOPS.find(s => s.name.includes(hub.substring(0,3)));
     if (!hubStop) continue;
     const hubLat = hubStop.lat, hubLng = hubStop.lng;
 
+    // 1구간: from → hub 경유 노선
     const leg1Routes = ROUTES.filter(r => {
       const coords = getRouteCoords(r);
       const hi = findCoordIdx(coords, hubLat, hubLng);
@@ -886,6 +889,7 @@ function findRoutes(fromName, toName, searchTime, dayType) {
       return (isGps || fi !== -1) && (fi === -1 || fi < hi);
     });
 
+    // 2구간: hub → to 경유 노선
     const leg2Routes = ROUTES.filter(r => {
       const coords = getRouteCoords(r);
       const hi = findCoordIdx(coords, hubLat, hubLng);
@@ -893,39 +897,82 @@ function findRoutes(fromName, toName, searchTime, dayType) {
       return hi !== -1 && ti !== -1 && hi < ti;
     });
 
-    if (leg1Routes.length > 0 && leg2Routes.length > 0) {
-      const r1 = leg1Routes[0];
-      const r2 = leg2Routes[0];
-      // 이미 같은 조합이 있으면 스킵
-      const isDup = results.some(res =>
-        res.isTransfer &&
-        res.route['번호'] === r1['번호'] &&
-        res.route2['번호'] === r2['번호']
-      );
-      if (isDup) continue;
+    if (!leg1Routes.length || !leg2Routes.length) continue;
 
-      const bus1 = getNextBus(r1, searchTime, dayType);
-      if (!bus1) continue;
-      const [h, m] = bus1.split(':').map(Number);
-      // 1구간 소요시간 계산 후 환승지 도착 시간 기준으로 2구간 탐색
-      const leg1Minutes = estimateMinutes(r1['거리'] || 10);
-      const transferTime = new Date(searchTime);
-      transferTime.setHours(h, m + leg1Minutes + 10, 0); // 1구간 소요 + 10분 여유
-      const bus2 = getNextBus(r2, transferTime, dayType);
-      if (!bus2) continue;
+    const r2 = leg2Routes[0];
+    const count2 = r2[countKeyT] || 0;
+    if (!count2 || !r2['첫차'] || !r2['막차']) continue;
 
-      results.push({
-        route: r1, route2: r2,
-        stops: getRouteStops(r1),
-        stops2: getRouteStops(r2),
-        nextBus: bus1, nextBus2: bus2,
-        transferHub: hub,
-        transferCount: 1,
-        minutes: estimateMinutes((r1['거리']||0) + (r2['거리']||0)) + 15,
-        distanceKm: (r1['거리']||0) + (r2['거리']||0),
-        dayType,
-        isTransfer: true
-      });
+    // 2구간 시간표 생성 (현재 이후만)
+    const [f2h,f2m] = r2['첫차'].split(':').map(Number);
+    const [l2h,l2m] = r2['막차'].split(':').map(Number);
+    const f2Min = f2h*60+f2m, l2Min = l2h*60+l2m;
+    const int2 = count2 > 1 ? Math.round((l2Min-f2Min)/(count2-1)) : 0;
+    const leg2Times = [];
+    for (let i = 0; i < count2; i++) {
+      const t = f2Min + int2*i;
+      if (t >= nowMin) leg2Times.push(t); // 현재 이후만
+    }
+    if (!leg2Times.length) continue;
+
+    // 각 1구간 노선의 출발지→환승지 소요시간 계산
+    let found = false;
+    for (const r1 of leg1Routes) {
+      if (found) break;
+
+      const r1Coords = getRouteCoords(r1);
+      const fiIdx = fromLat ? findCoordIdx(r1Coords, fromLat, fromLng) : 0;
+      const hiIdx = findCoordIdx(r1Coords, hubLat, hubLng);
+      const segRatio = (fiIdx >= 0 && hiIdx > fiIdx)
+        ? (hiIdx - fiIdx) / Math.max(r1Coords.length, 1)
+        : 0.5;
+      const leg1Min = Math.round((r1['거리'] || 10) * segRatio * 2.5 + 5);
+
+      // 2구간 각 출발시간에 대해: 그 전에 출발해서 환승지에 도착 가능한 1구간 버스 탐색
+      for (const bus2Min of leg2Times) {
+        // 1구간이 환승지에 도착해야 하는 데드라인 = bus2Min - 5분 여유
+        const deadline = bus2Min - 5;
+        // 1구간 출발 데드라인 = deadline - leg1Min
+        const bus1Deadline = deadline - leg1Min;
+        if (bus1Deadline < nowMin) continue;
+
+        // 1구간 버스 중 bus1Deadline 이전 출발하는 최후 버스
+        const bus1 = getNextBus(r1, searchTime, dayType);
+        if (!bus1) continue;
+        const [b1h, b1m] = bus1.split(':').map(Number);
+        const bus1Min = b1h*60 + b1m;
+
+        // 1구간 버스가 데드라인 전에 출발해서 2구간 전에 도착 가능한지 확인
+        if (bus1Min > bus1Deadline) continue;
+        const arrivalAtHub = bus1Min + leg1Min;
+        if (arrivalAtHub + 5 > bus2Min) continue; // 도착 후 5분 여유 없으면 스킵
+
+        const bus2 = `${String(Math.floor(bus2Min/60)).padStart(2,'0')}:${String(bus2Min%60).padStart(2,'0')}`;
+
+        const isDup = results.some(res =>
+          res.isTransfer &&
+          res.route['번호'] === r1['번호'] &&
+          res.route2['번호'] === r2['번호'] &&
+          res.nextBus === bus1
+        );
+        if (isDup) continue;
+
+        const leg2Min = estimateMinutes(r2['거리'] || 10);
+        results.push({
+          route: r1, route2: r2,
+          stops: getRouteStops(r1),
+          stops2: getRouteStops(r2),
+          nextBus: bus1, nextBus2: bus2,
+          transferHub: hub,
+          transferCount: 1,
+          minutes: leg1Min + (bus2Min - arrivalAtHub) + leg2Min,
+          distanceKm: (r1['거리']||0) + (r2['거리']||0),
+          dayType,
+          isTransfer: true
+        });
+        found = true;
+        break;
+      }
     }
   }
 
@@ -1228,9 +1275,9 @@ function makeTimesRow(route, boardTime, dayType) {
     </div>`;
   }).join('');
 
-  return `<div style="margin-top:8px">
-    <div style="font-size:10px;color:#aaa;margin-bottom:3px">이후</div>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px">${chips}</div>
+  return `<div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
+    <span style="font-size:10px;color:#aaa;flex-shrink:0;padding-top:4px">이후</span>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;flex:1">${chips}</div>
   </div>`;
 }
 function renderRouteCard(r, idx, isBest, dayType) {

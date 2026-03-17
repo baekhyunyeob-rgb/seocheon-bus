@@ -238,14 +238,13 @@ html, body {
 .route-card {
   margin: 0 10px 8px;
   border-radius: 12px;
-  border: 0.5px solid var(--gray-border);
+  border: 1px solid #d0d0d0;
   background: var(--white);
   padding: 10px 12px;
   cursor: pointer;
 }
 .route-card.best { border: 1.5px solid var(--green); }
 .route-card:active { background: #f9f9f9; }
-
 .rc-top { display: flex; justify-content: space-between; align-items: center; }
 .rc-time { font-size: 18px; font-weight: 700; color: var(--text); }
 
@@ -279,7 +278,7 @@ html, body {
   padding: 10px 14px 4px;
 }
 
-.transfer-card { border-left: 3px solid #E65100; }
+
 
 .save-star-btn {
   background: none;
@@ -345,7 +344,7 @@ html, body {
 .tt-chip-lbl { font-size: 8px; color: var(--gray-text); margin-top: 1px; }
 .tt-chip.next-dep .tt-chip-lbl { color: var(--green); }
 .tt-chip-time.passed-time { text-decoration: line-through; }
-.transfer-card { border: 0.5px solid var(--gray-border); }
+
 
 /* 복귀 배너 */
 .return-banner {
