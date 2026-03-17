@@ -110,7 +110,14 @@ async function loadData() {
   try {
     const res = await fetch('data/routes.json');
     const all = await res.json();
-    ROUTES = all.filter(r => !r['노선군'].includes('타시도'));
+    // 타시도 노선도 서천 경유 구간은 포함 (보령↔비인·판교, 군산↔장항·서천, 부여↔한산)
+    const SEOCHEON_HUBS = ['서천','장항','한산','비인','판교','기산','문산','화양','마서'];
+    ROUTES = all.filter(r => {
+      if (!r['노선군'].includes('타시도')) return true;
+      // 타시도 노선 중 서천 지역 정류장을 경유하는 경우 포함
+      const text = r['기점'] + r['종점'] + r['경유'];
+      return SEOCHEON_HUBS.some(h => text.includes(h));
+    });
   } catch(e) {
     console.warn('routes.json 로드 실패, 내장 데이터 사용');
   }
@@ -698,6 +705,8 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     fromKey = nearest ? nearest.name.substring(0,4) : '서천터미널';
   }
 
+  const isGps = fromName === '현위치' || searchState.from?.isGps;
+
   // 직행 탐색
   ROUTES.forEach(route => {
     const stops = getRouteStops(route);
@@ -705,7 +714,8 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     const toIdx = stops.findIndex(s => s.includes(toName));
 
     if (toIdx === -1) return;
-    if (fromName !== '현위치' && fromIdx === -1) return;
+    // 출발지가 GPS이면 fromIdx 무시, 아니면 반드시 경유지에 있어야 함
+    if (!isGps && fromIdx === -1) return;
     if (fromIdx !== -1 && fromIdx >= toIdx) return;
 
     const nextBus = getNextBus(route, searchTime, dayType);
@@ -722,14 +732,19 @@ function findRoutes(fromName, toName, searchTime, dayType) {
 
   // 환승 탐색 (직행 결과 없을 때)
   if (results.length === 0) {
-    const HUBS_LIST = ['서천터미널', '장항터미널', '한산공용터미널'];
+    // 데이터 기반 허브: 10회 이상 경유되는 주요 정류장 자동 포함
+    const HUBS_LIST = [
+      '서천터미널', '장항터미널', '한산공용터미널',
+      '서천역', '장항읍내', '판교', '기산', '문산',
+      '화양', '비인', '마산', '시초', '광암', '구동입구'
+    ];
     HUBS_LIST.forEach(hub => {
       // 1구간: from → hub
       const leg1Routes = ROUTES.filter(r => {
         const stops = getRouteStops(r);
         const fi = stops.findIndex(s => s.includes(fromKey));
         const ti = stops.findIndex(s => s.includes(hub));
-        return ti !== -1 && (fromName === '현위치' || fi !== -1) && (fi === -1 || fi < ti);
+        return ti !== -1 && (isGps || fi !== -1) && (fi === -1 || fi < ti);
       });
       // 2구간: hub → to
       const leg2Routes = ROUTES.filter(r => {
@@ -744,7 +759,6 @@ function findRoutes(fromName, toName, searchTime, dayType) {
         const r2 = leg2Routes[0];
         const bus1 = getNextBus(r1, searchTime, dayType);
         if (!bus1) return;
-        // 환승 후 다음 버스 (30분 여유)
         const [h, m] = bus1.split(':').map(Number);
         const transferTime = new Date(searchTime);
         transferTime.setHours(h, m + 30, 0);
@@ -880,10 +894,26 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
   }
 
   if (results.length === 0) {
+    // 도착지 근처를 지나는 노선이 있는지 확인
+    const nearbyRoutes = ROUTES.filter(r => {
+      const stops = getRouteStops(r);
+      return stops.some(s => s.includes(toName.substring(0,3)));
+    }).slice(0, 3);
+
+    let hintHtml = '';
+    if (nearbyRoutes.length > 0) {
+      hintHtml = `<div style="margin-top:12px;padding:10px;background:#f8f8f8;border-radius:8px;font-size:12px;color:#666">
+        <div style="font-weight:700;margin-bottom:6px;color:#333">💡 "${toName}" 근처를 지나는 버스</div>
+        ${nearbyRoutes.map(r => `<div style="padding:3px 0">${r['번호']}번 · ${r['기점']} → ${r['종점']}</div>`).join('')}
+        <div style="font-size:11px;color:#aaa;margin-top:6px">출발지를 변경하거나 환승을 시도해보세요</div>
+      </div>`;
+    }
+
     body.innerHTML = `<div class="no-result">
       <div class="no-result-icon">🚌</div>
       <div class="no-result-text">검색된 경로가 없습니다</div>
       <div class="no-result-sub">${timeStr} 이후 운행하는 버스가 없거나<br>직접 연결 노선이 없습니다</div>
+      ${hintHtml}
     </div>`;
     window._searchResults = [];
     return;
@@ -915,15 +945,17 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
       return;
     }
 
+    const isOutsideRoute = r.route['노선군'].includes('타시도');
     html += `<div class="route-card ${isBest ? 'best' : ''}" onclick="showDetail(${i})">
       ${isBest ? '<div class="best-label">추천</div>' : ''}
       <div class="rc-top">
         <span class="rc-time">${r.minutes}분</span>
         <span class="rc-badge ${isBest ? 'badge-best' : 'badge-alt'}">${isBest ? '최단 직행' : '직행'}</span>
+        ${isOutsideRoute ? '<span class="rc-badge" style="background:#FFF3E0;color:#E65100">광역연결</span>' : ''}
       </div>
       <div class="rc-route">
         <span class="bus-pill">${r.route['번호']}번</span>
-        <span class="route-arrow">${r.route['노선군'].replace(/[0-9~]/g,'').trim().substring(0,6)}</span>
+        <span class="route-arrow">${r.route['노선군'].replace(/타시도\s*/g,'').replace(/[0-9~]/g,'').trim().substring(0,6)}</span>
         <span style="font-size:11px;color:#aaa">${r.distanceKm}km</span>
       </div>
       <div class="rc-info">${r.stops.slice(0,4).join(' → ')}${r.stops.length > 4 ? ' ...' : ''}</div>
@@ -931,69 +963,81 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
     </div>`;
   });
 
-  // 섹션2: 추천 노선 시간표
+  // 섹션2: 오늘 다음 운행버스는
   const best = results[0];
   if (!best.isTransfer) {
-    const bestRoute = best.route;
-    const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
-    const count = bestRoute[countKey] || 0;
-    const firstStr = bestRoute['첫차'];
-    const lastStr = bestRoute['막차'];
-    const now = new Date();
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-
-    if (count > 0 && firstStr && lastStr) {
-      const [fh, fm] = firstStr.split(':').map(Number);
-      const [lh, lm] = lastStr.split(':').map(Number);
-      const firstMin = fh * 60 + fm;
-      const lastMin = lh * 60 + lm;
-      const interval = count > 1 ? Math.round((lastMin - firstMin) / (count - 1)) : 0;
-      const times = [];
-      for (let i = 0; i < count; i++) {
-        const t = firstMin + interval * i;
-        times.push(String(Math.floor(t/60)).padStart(2,'0') + ':' + String(t%60).padStart(2,'0'));
-      }
-
-      html += '<div class="result-section-label" style="margin-top:4px">오늘 시간표</div>';
-      html += `<div class="tt-fill">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="background:#1D9E75;color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">${bestRoute['번호']}번</span>
-          <span style="font-size:12px;color:#555">${bestRoute['기점']} → ${bestRoute['종점']}</span>
-        </div>
-        <div style="font-size:11px;color:#bbb;margin-bottom:8px">※ 추정 시간표 · 실제와 다를 수 있음</div>
-        <div class="tt-grid">`;
-      times.forEach(t => {
-        const [th, tm] = t.split(':').map(Number);
-        const tMin = th * 60 + tm;
-        const isPassed = tMin < nowMin;
-        const isNext = t === best.nextBus;
-        html += `<div class="tt-chip ${isNext ? 'next-dep' : ''} ${isPassed ? 'passed' : ''}">
-          <div class="tt-chip-time ${isPassed ? 'passed-time' : ''}">${t}</div>
-          <div class="tt-chip-lbl">${isNext ? '다음' : t === lastStr ? '막차' : ''}</div>
-        </div>`;
-      });
-      html += '</div></div>';
+    const timetableHtml = buildTimetableHtml(best.route, best.nextBus, dayType, '#1D9E75');
+    if (timetableHtml) {
+      html += '<div class="result-section-label" style="margin-top:4px">오늘 다음 운행버스는</div>';
+      html += timetableHtml;
     }
   }
 
-  // 섹션3: 복귀 정보
+  // 섹션3: 복귀시에는
   const returnRoute = findReturnRoute(best, dayType);
   if (returnRoute) {
-    html += '<div class="result-section-label" style="margin-top:4px">복귀 정보</div>';
-    html += `<div class="return-banner">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="background:#E1F5EE;color:#0F6E56;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">${returnRoute.route['번호']}번</span>
-        <span style="font-size:13px;font-weight:600;color:#333">${toName} → ${fromName}</span>
-      </div>
-      <div class="ret-row">
-        <span class="ret-info">첫차 ${returnRoute.route['첫차']} · 막차 ${returnRoute.route['막차']}</span>
-        <span class="ret-time">하루 ${returnRoute.route['평일횟수']}회</span>
-      </div>
-    </div>`;
+    const retTimetableHtml = buildTimetableHtml(returnRoute.route, null, dayType, '#E24B4A');
+    if (retTimetableHtml) {
+      html += '<div class="result-section-label" style="margin-top:4px">복귀시에는</div>';
+      html += retTimetableHtml.replace(
+        'class="tt-fill"',
+        'class="tt-fill" style="border-left-color:#E24B4A"'
+      ).replace(
+        `background:#1D9E75`,
+        `background:#E24B4A`
+      );
+      // 복귀 방향 표시 추가 (노선 번호 뒤에)
+      html = html.replace(
+        `${returnRoute.route['기점']} → ${returnRoute.route['종점']}`,
+        `${toName} → ${fromName}`
+      );
+    }
   }
 
   body.innerHTML = html;
   window._searchResults = results;
+}
+
+function buildTimetableHtml(route, nextBus, dayType, accentColor) {
+  const color = accentColor || '#1D9E75';
+  const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+  const count = route[countKey] || 0;
+  const firstStr = route['첫차'];
+  const lastStr = route['막차'];
+  if (!count || !firstStr || !lastStr) return '';
+
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const [fh, fm] = firstStr.split(':').map(Number);
+  const [lh, lm] = lastStr.split(':').map(Number);
+  const fMin = fh * 60 + fm, lMin = lh * 60 + lm;
+  const interval = count > 1 ? Math.round((lMin - fMin) / (count - 1)) : 0;
+  const times = [];
+  for (let i = 0; i < count; i++) {
+    const t = fMin + interval * i;
+    times.push(String(Math.floor(t/60)).padStart(2,'0') + ':' + String(t%60).padStart(2,'0'));
+  }
+
+  let chipsHtml = '';
+  times.forEach(t => {
+    const [th, tm] = t.split(':').map(Number);
+    const tMin = th * 60 + tm;
+    const isPassed = tMin < nowMin;
+    const isNext = nextBus ? t === nextBus : false;
+    chipsHtml += `<div class="tt-chip ${isNext ? 'next-dep' : ''} ${isPassed ? 'passed' : ''}">
+      <div class="tt-chip-time ${isPassed ? 'passed-time' : ''}">${t}</div>
+      <div class="tt-chip-lbl">${isNext ? '다음' : t === lastStr ? '막차' : ''}</div>
+    </div>`;
+  });
+
+  return `<div class="tt-fill">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="background:${color};color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">${route['번호']}번</span>
+      <span style="font-size:12px;color:#555">${route['기점']} → ${route['종점']}</span>
+    </div>
+    <div style="font-size:11px;color:#bbb;margin-bottom:8px">※ 추정 시간표 · 실제와 다를 수 있음</div>
+    <div class="tt-grid">${chipsHtml}</div>
+  </div>`;
 }
 
 function findReturnRoute(forwardResult, dayType) {
