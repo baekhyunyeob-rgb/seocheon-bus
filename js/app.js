@@ -279,8 +279,13 @@ function initHomeMap() {
 }
 
 function addMyMarker(map, latlng) {
-  const content = `<div style="width:14px;height:14px;background:#185FA5;border:2.5px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>`;
-  new kakao.maps.CustomOverlay({ position: latlng, content, yAnchor: 0.5, zIndex: 10 }).setMap(map);
+  // 파란 풍선 모양 + 지명 표시
+  const content = `<div style="display:flex;flex-direction:column;align-items:center">
+    <div style="background:#185FA5;color:#fff;border-radius:10px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(24,95,165,0.4)">내 위치</div>
+    <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #185FA5;margin-top:-1px"></div>
+    <div style="width:6px;height:6px;background:#185FA5;border-radius:50%;margin-top:1px"></div>
+  </div>`;
+  new kakao.maps.CustomOverlay({ position: latlng, content, yAnchor: 1.0, zIndex: 10 }).setMap(map);
 }
 
 function goToMyLocation() {
@@ -420,21 +425,66 @@ function onPlaceInput(val) {
   const container = document.getElementById('modal-results');
   if (!val.trim()) { container.innerHTML = ''; return; }
 
-  const q = val.trim().toLowerCase();
-  const results = STOPS.filter(s => s.name.includes(val.trim())).slice(0, 20);
+  // 1차: 정류장명 직접 매칭
+  let results = STOPS.filter(s => s.name.includes(val.trim())).slice(0, 20);
 
+  // 2차: 직접 매칭 없으면 카카오 로컬 API로 지명 검색 → 가장 가까운 정류장
   if (results.length === 0) {
-    container.innerHTML = '<div class="loading">검색 결과가 없습니다</div>';
+    container.innerHTML = '<div class="loading">정류장을 찾는 중...</div>';
+    searchPlaceAndFindNearestStop(val.trim(), container);
     return;
   }
 
+  renderStopResults(results, container);
+}
+
+function searchPlaceAndFindNearestStop(keyword, container) {
+  if (typeof kakao === 'undefined') return;
+  const ps = new kakao.maps.services.Places();
+  ps.keywordSearch(keyword + ' 서천', (data, status) => {
+    if (status !== kakao.maps.services.Status.OK || data.length === 0) {
+      container.innerHTML = '<div class="loading">검색 결과가 없습니다</div>';
+      return;
+    }
+    // 검색된 장소 좌표 기준으로 가장 가까운 정류장 찾기
+    const place = data[0];
+    const pLat = parseFloat(place.y);
+    const pLng = parseFloat(place.x);
+
+    const nearest = STOPS.map(s => ({
+      ...s,
+      dist: Math.sqrt((s.lat - pLat) ** 2 + (s.lng - pLng) ** 2)
+    })).sort((a, b) => a.dist - b.dist).slice(0, 5);
+
+    container.innerHTML = `<div class="modal-section-label">
+      "${place.place_name}" 인근 정류장
+    </div>` + nearest.map(s => {
+      const display = s.displayName || s.name;
+      const distM = Math.round(s.dist * 111000);
+      return `<div class="modal-item" style="display:flex;align-items:center">
+        <div style="flex:1;display:flex;align-items:center;gap:8px"
+          onclick="selectPlace('${placeSearchTarget}', {name:'${s.name.replace(/'/g,"\\'")}', displayName:'${display.replace(/'/g,"\\'")}', lat:${s.lat}, lng:${s.lng}})">
+          <div class="modal-item-icon" style="background:#FFF3E0">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#EF9F27"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
+          </div>
+          <div>
+            <div class="modal-item-name">${display}</div>
+            <div style="font-size:10px;color:#bbb">약 ${distM}m</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  });
+}
+
+function renderStopResults(results, container) {
   container.innerHTML = '<div class="modal-section-label">정류장 검색결과</div>' +
     results.map(s => {
       const display = s.displayName || s.name;
       const isDiff = display !== s.name;
       return `
     <div class="modal-item" style="display:flex;align-items:center">
-      <div style="flex:1;display:flex;align-items:center;gap:8px" onclick="selectPlace('${placeSearchTarget}', {name:'${s.name}', displayName:'${display}', lat:${s.lat}, lng:${s.lng}})">
+      <div style="flex:1;display:flex;align-items:center;gap:8px" onclick="selectPlace('${placeSearchTarget}', {name:'${s.name.replace(/'/g,"\\'")}', displayName:'${display.replace(/'/g,"\\'")}', lat:${s.lat}, lng:${s.lng}})">
         <div class="modal-item-icon">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#1D9E75"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
         </div>
@@ -443,7 +493,7 @@ function onPlaceInput(val) {
           ${isDiff ? `<div style="font-size:10px;color:#bbb">${s.name}</div>` : ''}
         </div>
       </div>
-      <button onclick="savePlace({name:'${s.name}',displayName:'${display}',lat:${s.lat},lng:${s.lng}})" style="background:none;border:1px solid #ddd;border-radius:6px;padding:3px 8px;font-size:10px;color:#888;cursor:pointer;flex-shrink:0">저장</button>
+      <button onclick="savePlace({name:'${s.name.replace(/'/g,"\\'")}',displayName:'${display.replace(/'/g,"\\'")}',lat:${s.lat},lng:${s.lng}})" style="background:none;border:1px solid #ddd;border-radius:6px;padding:3px 8px;font-size:10px;color:#888;cursor:pointer;flex-shrink:0">저장</button>
     </div>`;
     }).join('');
 }
@@ -497,7 +547,6 @@ let homeFromLabel = null, homeToLabel = null;
 function updateHomeMarkers() {
   if (!mapHome) return;
 
-  // 기존 마커 제거
   if (homeFromMarker) homeFromMarker.setMap(null);
   if (homeToMarker) homeToMarker.setMap(null);
   if (homeFromLabel) homeFromLabel.setMap(null);
@@ -507,35 +556,34 @@ function updateHomeMarkers() {
   const to = searchState.to;
 
   if (from && from.lat && !from.isGps) {
-    homeFromMarker = new kakao.maps.Marker({
+    homeFromMarker = new kakao.maps.CustomOverlay({
       position: new kakao.maps.LatLng(from.lat, from.lng),
-      map: mapHome, zIndex: 5
+      content: `<div style="display:flex;flex-direction:column;align-items:center">
+        <div style="background:#185FA5;color:#fff;border-radius:10px;padding:2px 7px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 5px rgba(24,95,165,0.35)">출발</div>
+        <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #185FA5;margin-top:-1px"></div>
+        <div style="width:8px;height:8px;background:#185FA5;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.2);margin-top:1px"></div>
+      </div>`,
+      yAnchor: 1.05, zIndex: 5
     });
-    homeFromLabel = new kakao.maps.CustomOverlay({
-      position: new kakao.maps.LatLng(from.lat, from.lng),
-      content: `<div style="background:#185FA5;color:#fff;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;margin-bottom:4px">출발</div>`,
-      yAnchor: 2.8
-    });
-    homeFromLabel.setMap(mapHome);
+    homeFromMarker.setMap(mapHome);
   }
 
   if (to && to.lat) {
-    homeToMarker = new kakao.maps.Marker({
+    homeToMarker = new kakao.maps.CustomOverlay({
       position: new kakao.maps.LatLng(to.lat, to.lng),
-      map: mapHome, zIndex: 5
+      content: `<div style="display:flex;flex-direction:column;align-items:center">
+        <div style="background:#E24B4A;color:#fff;border-radius:10px;padding:2px 7px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 5px rgba(226,75,74,0.35)">도착</div>
+        <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #E24B4A;margin-top:-1px"></div>
+        <div style="width:8px;height:8px;background:#E24B4A;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.2);margin-top:1px"></div>
+      </div>`,
+      yAnchor: 1.05, zIndex: 5
     });
-    homeToLabel = new kakao.maps.CustomOverlay({
-      position: new kakao.maps.LatLng(to.lat, to.lng),
-      content: `<div style="background:#1D9E75;color:#fff;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;margin-bottom:4px">도착</div>`,
-      yAnchor: 2.8
-    });
-    homeToLabel.setMap(mapHome);
+    homeToMarker.setMap(mapHome);
   }
 
-  // 두 지점 모두 있으면 범위 맞춤
   if (from?.lat && to?.lat) {
     const bounds = new kakao.maps.LatLngBounds();
-    bounds.extend(new kakao.maps.LatLng(from.lat, from.lng));
+    if (!from.isGps) bounds.extend(new kakao.maps.LatLng(from.lat, from.lng));
     bounds.extend(new kakao.maps.LatLng(to.lat, to.lng));
     mapHome.setBounds(bounds, 80);
   }
@@ -611,7 +659,16 @@ function getDayType() {
 
 function findRoutes(fromName, toName, searchTime, dayType) {
   const results = [];
-  const fromKey = fromName.replace('현위치', '서천');
+
+  // 현위치인 경우 GPS 좌표로 가장 가까운 정류장 찾기
+  let fromKey = fromName;
+  if (fromName === '현위치' || searchState.from?.isGps) {
+    const nearest = STOPS.map(s => ({
+      ...s,
+      dist: Math.sqrt((s.lat - myLocation.lat)**2 + (s.lng - myLocation.lng)**2)
+    })).sort((a,b) => a.dist - b.dist)[0];
+    fromKey = nearest ? nearest.name.substring(0,4) : '서천터미널';
+  }
 
   // 직행 탐색
   ROUTES.forEach(route => {
@@ -751,19 +808,44 @@ function formatWaitTime(min) {
 }
 
 // ==================== 결과 렌더링 ====================
+
+// 서천군 정류장 위경도 범위 (stops.json 기반)
+const SEOCHEON_BOUNDS = { minLat: 35.97, maxLat: 36.22, minLng: 126.49, maxLng: 126.89 };
+
+function isInSeocheon(lat, lng) {
+  return lat >= SEOCHEON_BOUNDS.minLat && lat <= SEOCHEON_BOUNDS.maxLat &&
+         lng >= SEOCHEON_BOUNDS.minLng && lng <= SEOCHEON_BOUNDS.maxLng;
+}
+
 function renderResults(results, toName, fromName, timeStr, dayType) {
   const body = document.getElementById('result-body');
 
-  const seocheonKeywords = ['서천','장항','한산','판교','마서','비인','종천','기산','동백','마량','춘장','서면','화양','문산','시초'];
-  const isOutOfRange = searchState.to && !seocheonKeywords.some(k =>
-    (searchState.to.name||'').includes(k) || toName.includes(k)
-  );
+  // 도착지 범위 체크 (좌표가 있으면 위경도로, 없으면 정류장 데이터에서 확인)
+  const toLat = searchState.to?.lat;
+  const toLng = searchState.to?.lng;
+  const toInRange = toLat
+    ? isInSeocheon(toLat, toLng)
+    : STOPS.some(s => s.name.includes(toName.substring(0,3)));
 
-  if (isOutOfRange) {
+  if (!toInRange) {
     body.innerHTML = `<div class="no-result">
       <div class="no-result-icon">🗺️</div>
       <div class="no-result-text">앗, 여기는 서천 버스가 못 가요!</div>
       <div class="no-result-sub">"${toName}"은(는) 서천 관할 밖입니다 😅<br>서천군 내 목적지를 입력해주세요.<br><small style="color:#bbb">보령·부여·군산은 시외·기차 탭을 이용하세요</small></div>
+    </div>`;
+    window._searchResults = [];
+    return;
+  }
+
+  // 출발지도 범위 체크 (현위치 제외)
+  const fromLat = searchState.from?.lat;
+  const fromLng = searchState.from?.lng;
+  const fromIsGps = searchState.from?.isGps;
+  if (fromLat && !fromIsGps && !isInSeocheon(fromLat, fromLng)) {
+    body.innerHTML = `<div class="no-result">
+      <div class="no-result-icon">🗺️</div>
+      <div class="no-result-text">출발지도 서천 밖이에요!</div>
+      <div class="no-result-sub">"${fromName}"은(는) 서천 관할 밖입니다 😅<br>서천군 내 출발지를 입력해주세요.</div>
     </div>`;
     window._searchResults = [];
     return;

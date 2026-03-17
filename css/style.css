@@ -811,12 +811,17 @@ html, body {
   justify-content: center;
   gap: 3px;
   cursor: pointer;
-  color: #bbb;
-  padding: 4px 0;
+  color: #ccc;
+  padding: 4px 2px;
 }
-.tab.active { color: var(--green); }
-.tab span { font-size: 10px; font-weight: 500; line-height: 1; }
-.tab svg { flex-shrink: 0; }
+.tab.active { color: var(--text); }
+.tab span { font-size: 9px; font-weight: 700; line-height: 1; color: inherit; white-space: nowrap; }
+.tab svg { flex-shrink: 0; opacity: 0.35; }
+.tab.active svg { opacity: 1; }
+#tab-home.active span { color: #1D9E75; }
+#tab-routes.active span { color: #185FA5; }
+#tab-transport.active span { color: #7F77DD; }
+#tab-favorites.active span { color: #E24B4A; }
 
 /* ===== 로딩 ===== */
 .loading {
