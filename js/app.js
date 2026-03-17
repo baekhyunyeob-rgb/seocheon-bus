@@ -202,18 +202,22 @@ function loadKakaoMap() {
 }
 
 // ==================== 위치 ====================
+let myMarkerOverlay = null; // 내 위치 마커 전역 관리
+let gpsReady = false; // GPS 확인 여부
+
 function initLocation() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       pos => {
         myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        gpsReady = true;
         if (mapHome) {
           const latlng = new kakao.maps.LatLng(myLocation.lat, myLocation.lng);
           mapHome.setCenter(latlng);
-          addMyMarker(mapHome, latlng);
+          updateMyMarker(mapHome, latlng); // 기존 마커 지우고 새로 찍기
         }
       },
-      () => { /* GPS 실패 시 기본값 사용 */ }
+      () => { /* GPS 실패 시 기본값(서천) 유지 */ }
     );
   }
 }
@@ -227,7 +231,13 @@ function initHomeMap() {
     level: 8
   });
   mapHome.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
-  addMyMarker(mapHome, new kakao.maps.LatLng(myLocation.lat, myLocation.lng));
+  // GPS 결과가 오기 전에는 마커 표시 안 함 (GPS 성공 시 initLocation에서 찍힘)
+  // GPS 실패 대비 3초 후에도 마커 없으면 기본값으로 찍기
+  setTimeout(() => {
+    if (!myMarkerOverlay) {
+      updateMyMarker(mapHome, new kakao.maps.LatLng(myLocation.lat, myLocation.lng));
+    }
+  }, 3000);
 
   // 확대 시 정류장 표시 (레벨 7 이하)
   let stopOverlays = [];
@@ -278,14 +288,32 @@ function initHomeMap() {
   });
 }
 
-function addMyMarker(map, latlng) {
-  // 파란 풍선 모양 + 지명 표시
+function updateMyMarker(map, latlng) {
+  // 기존 내 위치 마커 제거
+  if (myMarkerOverlay) {
+    myMarkerOverlay.setMap(null);
+    myMarkerOverlay = null;
+  }
+  // 일반적인 위치 핀 아이콘 (파란 원 + 흰 점)
   const content = `<div style="display:flex;flex-direction:column;align-items:center">
-    <div style="background:#185FA5;color:#fff;border-radius:10px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(24,95,165,0.4)">내 위치</div>
-    <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #185FA5;margin-top:-1px"></div>
-    <div style="width:6px;height:6px;background:#185FA5;border-radius:50%;margin-top:1px"></div>
+    <div style="width:22px;height:22px;background:#185FA5;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(24,95,165,0.5);display:flex;align-items:center;justify-content:center">
+      <div style="width:6px;height:6px;background:#fff;border-radius:50%"></div>
+    </div>
+    <div style="width:2px;height:6px;background:#185FA5;opacity:0.6"></div>
+    <div style="width:4px;height:4px;background:#185FA5;border-radius:50%;opacity:0.3"></div>
   </div>`;
-  new kakao.maps.CustomOverlay({ position: latlng, content, yAnchor: 1.0, zIndex: 10 }).setMap(map);
+  myMarkerOverlay = new kakao.maps.CustomOverlay({
+    position: latlng,
+    content,
+    yAnchor: 1.0,
+    zIndex: 10
+  });
+  myMarkerOverlay.setMap(map);
+}
+
+// 하위 호환용 (혹시 다른 곳에서 호출하는 경우 대비)
+function addMyMarker(map, latlng) {
+  updateMyMarker(map, latlng);
 }
 
 function goToMyLocation() {
@@ -379,8 +407,8 @@ function renderModalSaved(target) {
   const container = document.getElementById('modal-saved');
   let html = '';
 
-  // 현위치 옵션 (출발지만)
-  if (target === 'from') {
+  // 현위치 옵션 (출발지만, GPS 확인된 경우에만 표시)
+  if (target === 'from' && gpsReady) {
     html += `<div class="modal-section-label">빠른 선택</div>`;
     html += `<div class="modal-item" onclick="selectPlace('from', {name:'현위치', lat:${myLocation.lat}, lng:${myLocation.lng}, isGps:true})">
       <div class="modal-item-icon" style="background:#E6F1FB">
