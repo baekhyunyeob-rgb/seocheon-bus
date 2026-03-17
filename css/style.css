@@ -322,8 +322,8 @@ html, body {
   border-left: 3px solid #1D9E75;
 }
 .tt-fill.ret {
-  border: 0.8px solid var(--gray-border);
-  border-left: 0.8px solid var(--gray-border);
+  border: 1px solid #d0d0d0;
+  border-left: 1px solid #d0d0d0;
 }
 .tt-fill-title { font-size: 11px; font-weight: 700; color: var(--gray-text); margin-bottom: 8px; }
 .tt-grid {

@@ -929,12 +929,16 @@ function findRoutes(fromName, toName, searchTime, dayType) {
   results.sort((a, b) => {
     const aArrival = getMinutesUntil(a.nextBus) + a.minutes;
     const bArrival = getMinutesUntil(b.nextBus) + b.minutes;
-    if (Math.abs(aArrival - bArrival) <= 5) {
-      return (a.transferCount || 0) - (b.transferCount || 0);
-    }
-    return aArrival - bArrival;
+    // 1순위: 도착 시간 (5분 이내 차이면 같다고 봄)
+    if (Math.abs(aArrival - bArrival) > 5) return aArrival - bArrival;
+    // 2순위: 환승 횟수
+    const aTransfer = a.transferCount || 0;
+    const bTransfer = b.transferCount || 0;
+    if (aTransfer !== bTransfer) return aTransfer - bTransfer;
+    // 3순위: 소요 시간
+    return a.minutes - b.minutes;
   });
-  return results.slice(0, 4);
+  return results.slice(0, 6);
 }
 
 function getRouteStops(route) {
@@ -1202,45 +1206,41 @@ function makeTimesRow(route, boardTime, dayType) {
     const [th,tm] = t.split(':').map(Number);
     const passed = th*60+tm < nowMin;
     const isNext = t === boardTime;
-    return `<span style="
-      background:${isNext ? '#1D9E75' : passed ? '#f0f0f0' : '#f8f8f8'};
-      color:${isNext ? '#fff' : passed ? '#ccc' : '#555'};
-      border-radius:5px; padding:3px 7px; font-size:11px;
-      font-weight:${isNext ? '700' : '400'};
-      text-decoration:${passed ? 'line-through' : 'none'};
-      flex-shrink:0;
-    ">${t}</span>`;
+    return `<div class="tt-chip ${isNext?'next-dep':''} ${passed?'passed':''}" style="min-width:40px">
+      <div class="tt-chip-time ${passed?'passed-time':''}">${t}</div>
+      <div class="tt-chip-lbl">${isNext?'다음':t===lastStr?'막차':''}</div>
+    </div>`;
   }).join('');
 
-  return `<div style="display:flex;align-items:center;gap:4px;margin-top:8px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px">
-    <span style="font-size:11px;color:#aaa;flex-shrink:0">이후</span>
-    ${chips}
+  return `<div style="margin-top:8px">
+    <div style="font-size:11px;color:#aaa;margin-bottom:4px">이후</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">${chips}</div>
   </div>`;
 }
 
 function renderRouteCard(r, idx, isBest, dayType) {
   const boardTime = r.nextBus;
   const arriveTime = calcArrivalTime(r.nextBus, r.minutes);
-  const waitText = formatWaitTime(getMinutesUntil(r.nextBus));
+  const zoneColor = getZoneColor(r.route);
   const isOutside = r.route['노선군'].includes('타시도');
 
   if (r.isTransfer) {
     const arriveTime2 = calcArrivalTime(r.nextBus2, r.minutes);
+    const zoneColor2 = getZoneColor(r.route2);
     const timesRow = makeTimesRow(r.route, r.nextBus, dayType);
     return `<div class="route-card transfer-card" onclick="showDetail(${idx})">
-      ${isBest ? '<div class="best-label">추천</div>' : ''}
-      <div style="font-size:12px;color:#555;margin-bottom:6px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-        <span class="bus-pill" style="font-size:11px">${r.route['번호']}번</span>
-        <span style="color:#ddd">›</span>
-        <span style="color:#888">${r.transferHub}</span>
-        <span style="color:#ddd">›</span>
-        <span class="bus-pill" style="font-size:11px">${r.route2['번호']}번</span>
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;flex-wrap:wrap">
+        <span class="bus-pill" style="background:${zoneColor}">${r.route['번호']}번</span>
+        <span style="color:#ddd;font-size:12px">›</span>
+        <span style="color:#888;font-size:12px">${r.transferHub}</span>
+        <span style="color:#ddd;font-size:12px">›</span>
+        <span class="bus-pill" style="background:${zoneColor2}">${r.route2['번호']}번</span>
         <span class="rc-badge badge-transfer" style="margin-left:auto">1회 환승</span>
       </div>
       <div style="font-size:13px;color:#333">
         <span style="color:#185FA5;font-weight:700">${r.nextBus}</span>
         <span style="color:#aaa;font-size:11px"> 탑승</span>
-        <span style="color:#888;font-size:12px"> (${r.nextBus2} ${r.transferHub} 환승)</span>
+        <span style="color:#ccc;font-size:12px"> (${r.nextBus2} ${r.transferHub} 환승)</span>
         <span style="color:#E24B4A;font-weight:700"> ${arriveTime2}</span>
         <span style="color:#aaa;font-size:11px"> 도착</span>
         <span style="color:#aaa;font-size:11px;float:right">${r.minutes}분 소요</span>
@@ -1253,16 +1253,15 @@ function renderRouteCard(r, idx, isBest, dayType) {
   const timesRow = makeTimesRow(r.route, boardTime, dayType);
 
   return `<div class="route-card ${isBest ? 'best' : ''}" onclick="showDetail(${idx})">
-    ${isBest ? '<div class="best-label">추천</div>' : ''}
     <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;flex-wrap:wrap">
-      <span class="bus-pill" style="font-size:11px">${r.route['번호']}번</span>
+      <span class="bus-pill" style="background:${zoneColor}">${r.route['번호']}번</span>
       ${isOutside ? '<span class="rc-badge" style="background:#FFF3E0;color:#E65100;font-size:10px">광역</span>' : ''}
-      <span style="font-size:12px">${lineSummary}</span>
+      <span style="font-size:12px;color:#555">${lineSummary}</span>
     </div>
     <div style="font-size:13px;color:#333">
       <span style="color:#185FA5;font-weight:700">${boardTime}</span>
       <span style="color:#aaa;font-size:11px"> 탑승</span>
-      <span style="margin:0 4px;color:#ddd">›</span>
+      <span style="margin:0 4px;color:#ccc">›</span>
       <span style="color:#E24B4A;font-weight:700">${arriveTime}</span>
       <span style="color:#aaa;font-size:11px"> 도착</span>
       <span style="color:#aaa;font-size:11px;float:right">${r.minutes}분 소요</span>
@@ -1308,7 +1307,6 @@ function buildTimetableHtml(route, nextBus, dayType, accentColor) {
       <span style="background:${color};color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">${route['번호']}번</span>
       <span style="font-size:12px;color:#555">${route['기점']} → ${route['종점']}</span>
     </div>
-    <div style="font-size:11px;color:#bbb;margin-bottom:8px">※ 추정 시간표 · 실제와 다를 수 있음</div>
     <div class="tt-grid">${chipsHtml}</div>
   </div>`;
 }
