@@ -333,18 +333,19 @@ html, body {
 }
 .tt-chip {
   background: #f8f8f8;
-  border-radius: 7px;
-  padding: 6px 4px;
+  border-radius: 5px;
+  padding: 4px 3px;
   text-align: center;
   border: 0.5px solid var(--gray-border);
 }
-.tt-chip.next-dep { background: var(--green); border-color: var(--green); }
+.tt-chip.next-dep { background: #f8f8f8; border-color: var(--green); border-width: 1.5px; }
 .tt-chip.passed { opacity: .35; }
-.tt-chip-time { font-size: 12px; font-weight: 700; color: var(--text); }
-.tt-chip.next-dep .tt-chip-time { color: var(--white); }
-.tt-chip-lbl { font-size: 9px; color: var(--gray-text); margin-top: 1px; }
-.tt-chip.next-dep .tt-chip-lbl { color: rgba(255,255,255,.8); }
+.tt-chip-time { font-size: 11px; font-weight: 700; color: var(--text); }
+.tt-chip.next-dep .tt-chip-time { color: var(--green); }
+.tt-chip-lbl { font-size: 8px; color: var(--gray-text); margin-top: 1px; }
+.tt-chip.next-dep .tt-chip-lbl { color: var(--green); }
 .tt-chip-time.passed-time { text-decoration: line-through; }
+.transfer-card { border: 0.5px solid var(--gray-border); }
 
 /* 복귀 배너 */
 .return-banner {

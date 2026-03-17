@@ -907,8 +907,10 @@ function findRoutes(fromName, toName, searchTime, dayType) {
       const bus1 = getNextBus(r1, searchTime, dayType);
       if (!bus1) continue;
       const [h, m] = bus1.split(':').map(Number);
+      // 1구간 소요시간 계산 후 환승지 도착 시간 기준으로 2구간 탐색
+      const leg1Minutes = estimateMinutes(r1['거리'] || 10);
       const transferTime = new Date(searchTime);
-      transferTime.setHours(h, m + 30, 0);
+      transferTime.setHours(h, m + leg1Minutes + 10, 0); // 1구간 소요 + 10분 여유
       const bus2 = getNextBus(r2, transferTime, dayType);
       if (!bus2) continue;
 
@@ -953,6 +955,13 @@ function getRouteStops(route) {
 
 function estimateMinutes(km) {
   return Math.round(km * 2.5 + 5);
+}
+
+function formatDuration(minutes) {
+  if (minutes < 60) return `${minutes}분`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
 }
 
 function getNextBus(route, searchTime, dayType) {
@@ -1204,24 +1213,26 @@ function makeTimesRow(route, boardTime, dayType) {
     times.push(String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'));
   }
 
-  // 지난 시간 제외
+  // 지난 시간 및 현재 다음버스(boardTime) 제외 → 그 이후만 표시
+  const [bh, bm] = boardTime.split(':').map(Number);
+  const boardMin = bh*60+bm;
   const upcoming = times.filter(t => {
     const [th,tm] = t.split(':').map(Number);
-    return th*60+tm >= nowMin;
+    return th*60+tm > boardMin; // 다음버스 이후만
   });
   if (upcoming.length === 0) return '';
 
   const chips = upcoming.map(t => {
-    const isNext = t === boardTime;
-    return `<div class="tt-chip ${isNext?'next-dep':''}" style="min-width:40px">
+    return `<div class="tt-chip">
       <div class="tt-chip-time">${t}</div>
-      <div class="tt-chip-lbl">${isNext?'다음':t===lastStr?'막차':''}</div>
     </div>`;
   }).join('');
 
-  return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px">${chips}</div>`;
+  return `<div style="margin-top:8px">
+    <div style="font-size:10px;color:#aaa;margin-bottom:3px">이후</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px">${chips}</div>
+  </div>`;
 }
-
 function renderRouteCard(r, idx, isBest, dayType) {
   const boardTime = r.nextBus;
   const arriveTime = calcArrivalTime(r.nextBus, r.minutes);
@@ -1247,7 +1258,7 @@ function renderRouteCard(r, idx, isBest, dayType) {
         <span style="color:#ccc;font-size:12px"> (${r.nextBus2} ${r.transferHub} 환승)</span>
         <span style="color:#E24B4A;font-weight:700"> ${arriveTime2}</span>
         <span style="color:#aaa;font-size:11px"> 도착</span>
-        <span style="color:#aaa;font-size:11px;float:right">${r.minutes}분 소요</span>
+        <span style="color:#aaa;font-size:11px;float:right">${formatDuration(r.minutes)}</span>
       </div>
       ${timesRow}
     </div>`;
@@ -1268,7 +1279,7 @@ function renderRouteCard(r, idx, isBest, dayType) {
       <span style="margin:0 4px;color:#999">→</span>
       <span style="color:#E24B4A;font-weight:700">${arriveTime}</span>
       <span style="color:#aaa;font-size:11px"> 도착</span>
-      <span style="color:#aaa;font-size:11px;float:right">${r.minutes}분 소요</span>
+      <span style="color:#aaa;font-size:11px;float:right">${formatDuration(r.minutes)}</span>
     </div>
     ${timesRow}
   </div>`;
@@ -1301,7 +1312,6 @@ function buildTimetableHtml(route, nextBus, dayType, accentColor) {
     const isNext = nextBus ? t === nextBus : false;
     chipsHtml += `<div class="tt-chip ${isNext ? 'next-dep' : ''}">
       <div class="tt-chip-time">${t}</div>
-      <div class="tt-chip-lbl">${isNext ? '다음' : t === lastStr ? '막차' : ''}</div>
     </div>`;
   });
 
