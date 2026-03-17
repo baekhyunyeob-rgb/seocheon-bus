@@ -1097,7 +1097,6 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
     if (retTimetableHtml) {
       html += '<div class="result-section-label" style="margin-top:4px">복귀시에는</div>';
       let retHtml = retTimetableHtml
-        .replace('class="tt-fill"', 'class="tt-fill" style="border-left-color:#E24B4A"')
         .replace('background:#1D9E75', 'background:#E24B4A');
       retHtml = retHtml.replace(
         `${returnRoute.route['기점']} → ${returnRoute.route['종점']}`,
@@ -1111,47 +1110,129 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
   window._searchResults = results;
 }
 
+function calcArrivalTime(departTimeStr, minutes) {
+  const [h, m] = departTimeStr.split(':').map(Number);
+  const total = h * 60 + m + minutes;
+  return `${String(Math.floor(total/60) % 24).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;
+}
+
+function getBoardAndAlight(r) {
+  // 사용자 출발지와 도착지 기준으로 탑승/하차 정류장 찾기
+  const coords = r.coords || [];
+  const fromLat = searchState.from?.lat || myLocation.lat;
+  const fromLng = searchState.from?.lng || myLocation.lng;
+  const toLat = searchState.to?.lat;
+  const toLng = searchState.to?.lng;
+
+  let boardName = r.stops?.[0] || r.route['기점'];
+  let alightName = r.stops?.[r.stops.length-1] || r.route['종점'];
+
+  if (fromLat && coords.length) {
+    let bestI = -1, bestD = 9999999;
+    coords.forEach((c,i) => {
+      if (!c.lat) return;
+      const d = Math.sqrt((c.lat-fromLat)**2 + (c.lng-fromLng)**2)*111000;
+      if (d < bestD) { bestD = d; bestI = i; }
+    });
+    if (bestI >= 0) boardName = coords[bestI].name;
+  }
+  if (toLat && coords.length) {
+    let bestI = -1, bestD = 9999999;
+    coords.forEach((c,i) => {
+      if (!c.lat) return;
+      const d = Math.sqrt((c.lat-toLat)**2 + (c.lng-toLng)**2)*111000;
+      if (d < bestD) { bestD = d; bestI = i; }
+    });
+    if (bestI >= 0) alightName = coords[bestI].name;
+  }
+  return { boardName, alightName };
+}
+
 function renderRouteCard(r, idx, isBest, dayType) {
   const waitMin = getMinutesUntil(r.nextBus);
   const waitText = formatWaitTime(waitMin);
-  const arrivalMin = waitMin + r.minutes;
-  const arrivalText = arrivalMin > 0
-    ? `약 ${arrivalMin}분 후 도착`
-    : '곧 도착';
+  const boardTime = r.nextBus;
+  const arriveTime = calcArrivalTime(r.nextBus, r.minutes);
+  const isOutside = r.route['노선군'].includes('타시도');
+
+  // 다음 버스 시간 박스 (upcoming times)
+  const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+  const count = r.route[countKey] || 0;
+  const firstStr = r.route['첫차'], lastStr = r.route['막차'];
+  let timesHtml = '';
+  if (count > 0 && firstStr && lastStr) {
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const [fh,fm] = firstStr.split(':').map(Number);
+    const [lh,lm] = lastStr.split(':').map(Number);
+    const fMin = fh*60+fm, lMin = lh*60+lm;
+    const interval = count > 1 ? Math.round((lMin-fMin)/(count-1)) : 0;
+    const times = [];
+    for (let i = 0; i < count; i++) {
+      const t = fMin + interval*i;
+      times.push(String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'));
+    }
+    const upcoming = times.filter(t => {
+      const [th,tm] = t.split(':').map(Number);
+      return th*60+tm >= nowMin;
+    }).slice(0, 5);
+    timesHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px">` +
+      upcoming.map(t => {
+        const isNext = t === boardTime;
+        return `<span style="background:${isNext?'#1D9E75':'#f4f4f4'};color:${isNext?'#fff':'#555'};
+          border-radius:6px;padding:4px 8px;font-size:12px;font-weight:${isNext?'700':'400'}">
+          ${t}${isNext?' ←':''}
+        </span>`;
+      }).join('') + `</div>`;
+  }
 
   if (r.isTransfer) {
+    const board1 = r.route['번호']+'번';
+    const board2 = r.route2['번호']+'번';
+    const arrive2 = calcArrivalTime(r.nextBus2, r.minutes);
     return `<div class="route-card transfer-card" onclick="showDetail(${idx})">
       ${isBest ? '<div class="best-label">추천</div>' : ''}
-      <div class="rc-top">
-        <span class="rc-time">${r.minutes}분</span>
-        <span class="rc-badge badge-transfer">1회 환승</span>
-        <span style="font-size:11px;color:#aaa;margin-left:auto">${arrivalText}</span>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <span class="bus-pill">${board1}</span>
+        <span style="font-size:12px;color:#888">${r.nextBus} 탑승</span>
+        <span style="color:#ccc;font-size:12px">→</span>
+        <span style="font-size:12px;color:#888">${r.transferHub} 환승</span>
+        <span style="color:#ccc;font-size:12px">→</span>
+        <span class="bus-pill">${board2}</span>
+        <span style="font-size:12px;color:#888">${r.nextBus2} 탑승</span>
       </div>
-      <div class="rc-route">
-        <span class="bus-pill">${r.route['번호']}번</span>
-        <span class="route-arrow">→ ${r.transferHub} →</span>
-        <span class="bus-pill">${r.route2['번호']}번</span>
+      <div style="display:flex;align-items:center;gap:6px;font-size:13px">
+        <span style="color:#185FA5;font-weight:700">${r.nextBus}</span>
+        <span style="color:#bbb">탑승 →</span>
+        <span style="color:#E24B4A;font-weight:700">${arrive2}</span>
+        <span style="color:#bbb">도착</span>
+        <span class="rc-badge badge-transfer" style="margin-left:auto">1회 환승</span>
       </div>
-      <div class="rc-next">첫 버스 <strong>${r.nextBus}</strong> · <span style="color:#1D9E75">${waitText}</span> · 환승 후 <strong>${r.nextBus2}</strong></div>
+      <div style="font-size:11px;color:#aaa;margin-top:4px">${waitText} 출발</div>
     </div>`;
   }
 
-  const isOutside = r.route['노선군'].includes('타시도');
+  const { boardName, alightName } = getBoardAndAlight(r);
+
   return `<div class="route-card ${isBest ? 'best' : ''}" onclick="showDetail(${idx})">
     ${isBest ? '<div class="best-label">추천</div>' : ''}
-    <div class="rc-top">
-      <span class="rc-time">${r.minutes}분</span>
-      <span class="rc-badge ${isBest ? 'badge-best' : 'badge-alt'}">${isBest ? '최단 직행' : '직행'}</span>
-      ${isOutside ? '<span class="rc-badge" style="background:#FFF3E0;color:#E65100">광역</span>' : ''}
-      <span style="font-size:11px;color:#aaa;margin-left:auto">${arrivalText}</span>
-    </div>
-    <div class="rc-route">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
       <span class="bus-pill">${r.route['번호']}번</span>
-      <span class="route-arrow">${r.route['노선군'].replace(/타시도\s*/g,'').replace(/[0-9~]/g,'').trim().substring(0,6)}</span>
-      <span style="font-size:11px;color:#aaa">${r.distanceKm}km</span>
+      ${isOutside ? '<span class="rc-badge" style="background:#FFF3E0;color:#E65100;font-size:10px">광역</span>' : ''}
+      <span style="font-size:12px;color:#555;font-weight:600">${boardName}</span>
+      <span style="color:#ccc">→</span>
+      <span style="font-size:12px;color:#555;font-weight:600">${alightName}</span>
     </div>
-    <div class="rc-info">${r.stops.slice(0,4).join(' → ')}${r.stops.length > 4 ? ' ...' : ''}</div>
-    <div class="rc-next">다음 버스 <strong>${r.nextBus}</strong> · <span style="color:#1D9E75">${waitText}</span></div>
+    <div style="display:flex;align-items:center;gap:6px;font-size:13px">
+      <span style="color:#185FA5;font-weight:700">${boardTime}</span>
+      <span style="color:#bbb">탑승 →</span>
+      <span style="color:#E24B4A;font-weight:700">${arriveTime}</span>
+      <span style="color:#bbb">도착</span>
+      <span style="font-size:11px;color:#aaa;margin-left:auto">${r.minutes}분 소요</span>
+    </div>
+    <div style="font-size:11px;color:#1D9E75;margin-top:2px">${waitText} 출발</div>
+    <div style="font-size:11px;color:#999;margin-top:4px">다음 버스 시간</div>
+    ${timesHtml}
   </div>`;
 }
 
