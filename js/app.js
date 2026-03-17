@@ -251,8 +251,8 @@ function buildDisplayNames(stops) {
       const sorted = [...idxs].sort((a, b) =>
         dists[idxs.indexOf(a)] - dists[idxs.indexOf(b)]
       );
-      result[sorted[0]].displayName = `${name}(내향)`;
-      result[sorted[1]].displayName = `${name}(외향)`;
+      result[sorted[0]].displayName = `${name}(서천읍 방향)`;
+      result[sorted[1]].displayName = name; // 외향은 그냥 원래 이름
       // 3개 이상이면 번호 부여
       for (let k = 2; k < sorted.length; k++) {
         result[sorted[k]].displayName = `${name}(${k+1})`;
@@ -286,12 +286,35 @@ function initLocation() {
         if (mapHome) {
           const latlng = new kakao.maps.LatLng(myLocation.lat, myLocation.lng);
           mapHome.setCenter(latlng);
-          updateMyMarker(mapHome, latlng); // 기존 마커 지우고 새로 찍기
+          updateMyMarker(mapHome, latlng);
+        }
+        // 서천 외 지역 안내
+        if (!isInSeocheon(myLocation.lat, myLocation.lng)) {
+          showOutOfAreaNotice();
         }
       },
       () => { /* GPS 실패 시 기본값(서천) 유지 */ }
     );
   }
+}
+
+function showOutOfAreaNotice() {
+  // 기존 안내가 있으면 제거
+  const existing = document.getElementById('out-of-area-notice');
+  if (existing) existing.remove();
+
+  const notice = document.createElement('div');
+  notice.id = 'out-of-area-notice';
+  notice.style.cssText = `
+    position:absolute; top:12px; left:50%; transform:translateX(-50%);
+    background:rgba(30,30,30,0.82); color:#fff;
+    border-radius:20px; padding:6px 14px;
+    font-size:12px; font-weight:600; white-space:nowrap;
+    z-index:100; pointer-events:none;
+    box-shadow:0 2px 8px rgba(0,0,0,0.3);
+  `;
+  notice.textContent = '📍 현재 서천 지역이 아닙니다';
+  document.getElementById('screen-home')?.appendChild(notice);
 }
 
 // ==================== 홈 지도 ====================
@@ -902,8 +925,16 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     }
   }
 
-  results.sort((a, b) => a.minutes - b.minutes);
-  return results.slice(0, 3);
+  // 도착 예상 시간 기준 정렬, 비슷한 경우(5분 이내) 환승 적은 것 우선
+  results.sort((a, b) => {
+    const aArrival = getMinutesUntil(a.nextBus) + a.minutes;
+    const bArrival = getMinutesUntil(b.nextBus) + b.minutes;
+    if (Math.abs(aArrival - bArrival) <= 5) {
+      return (a.transferCount || 0) - (b.transferCount || 0);
+    }
+    return aArrival - bArrival;
+  });
+  return results.slice(0, 4);
 }
 
 function getRouteStops(route) {
@@ -1043,81 +1074,85 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
 
   let html = '';
 
-  // 섹션1: 경로 카드
-  html += '<div class="result-section-label">경로 검색 결과</div>';
-  results.forEach((r, i) => {
-    const isBest = i === 0;
-    const waitMin = getMinutesUntil(r.nextBus);
-    const waitText = formatWaitTime(waitMin);
-
-    if (r.isTransfer) {
-      html += `<div class="route-card transfer-card" onclick="showDetail(${i})">
-        <div class="rc-top">
-          <span class="rc-time">${r.minutes}분</span>
-          <span class="rc-badge badge-transfer">1회 환승</span>
-        </div>
-        <div class="rc-route">
-          <span class="bus-pill">${r.route['번호']}번</span>
-          <span class="route-arrow">→ ${r.transferHub} →</span>
-          <span class="bus-pill">${r.route2['번호']}번</span>
-        </div>
-        <div class="rc-info">${r.transferHub}에서 환승 · 2번째 ${r.nextBus2} 출발</div>
-        <div class="rc-next">첫 버스 <strong>${r.nextBus}</strong> · <span style="color:#1D9E75">${waitText}</span></div>
-      </div>`;
-      return;
-    }
-
-    const isOutsideRoute = r.route['노선군'].includes('타시도');
-    html += `<div class="route-card ${isBest ? 'best' : ''}" onclick="showDetail(${i})">
-      ${isBest ? '<div class="best-label">추천</div>' : ''}
-      <div class="rc-top">
-        <span class="rc-time">${r.minutes}분</span>
-        <span class="rc-badge ${isBest ? 'badge-best' : 'badge-alt'}">${isBest ? '최단 직행' : '직행'}</span>
-        ${isOutsideRoute ? '<span class="rc-badge" style="background:#FFF3E0;color:#E65100">광역연결</span>' : ''}
-      </div>
-      <div class="rc-route">
-        <span class="bus-pill">${r.route['번호']}번</span>
-        <span class="route-arrow">${r.route['노선군'].replace(/타시도\s*/g,'').replace(/[0-9~]/g,'').trim().substring(0,6)}</span>
-        <span style="font-size:11px;color:#aaa">${r.distanceKm}km</span>
-      </div>
-      <div class="rc-info">${r.stops.slice(0,4).join(' → ')}${r.stops.length > 4 ? ' ...' : ''}</div>
-      <div class="rc-next">다음 버스 <strong>${r.nextBus}</strong> · <span style="color:#1D9E75">${waitText}</span></div>
-    </div>`;
-  });
-
-  // 섹션2: 오늘 다음 운행버스는
+  // 추천 경로 (1개) + 기타 경로
   const best = results[0];
-  if (!best.isTransfer) {
-    const timetableHtml = buildTimetableHtml(best.route, best.nextBus, dayType, '#1D9E75');
-    if (timetableHtml) {
-      html += '<div class="result-section-label" style="margin-top:4px">오늘 다음 운행버스는</div>';
-      html += timetableHtml;
-    }
+  const others = results.slice(1);
+
+  // 추천 경로 카드
+  html += '<div class="result-section-label">추천 경로</div>';
+  html += renderRouteCard(best, 0, true, dayType);
+
+  // 기타 경로
+  if (others.length > 0) {
+    html += '<div class="result-section-label" style="margin-top:4px">기타 경로</div>';
+    others.forEach((r, i) => {
+      html += renderRouteCard(r, i + 1, false, dayType);
+    });
   }
 
-  // 섹션3: 복귀시에는
+  // 복귀시에는
   const returnRoute = findReturnRoute(best, dayType);
   if (returnRoute) {
     const retTimetableHtml = buildTimetableHtml(returnRoute.route, null, dayType, '#E24B4A');
     if (retTimetableHtml) {
       html += '<div class="result-section-label" style="margin-top:4px">복귀시에는</div>';
-      html += retTimetableHtml.replace(
-        'class="tt-fill"',
-        'class="tt-fill" style="border-left-color:#E24B4A"'
-      ).replace(
-        `background:#1D9E75`,
-        `background:#E24B4A`
-      );
-      // 복귀 방향 표시 추가 (노선 번호 뒤에)
-      html = html.replace(
+      let retHtml = retTimetableHtml
+        .replace('class="tt-fill"', 'class="tt-fill" style="border-left-color:#E24B4A"')
+        .replace('background:#1D9E75', 'background:#E24B4A');
+      retHtml = retHtml.replace(
         `${returnRoute.route['기점']} → ${returnRoute.route['종점']}`,
         `${toName} → ${fromName}`
       );
+      html += retHtml;
     }
   }
 
   body.innerHTML = html;
   window._searchResults = results;
+}
+
+function renderRouteCard(r, idx, isBest, dayType) {
+  const waitMin = getMinutesUntil(r.nextBus);
+  const waitText = formatWaitTime(waitMin);
+  const arrivalMin = waitMin + r.minutes;
+  const arrivalText = arrivalMin > 0
+    ? `약 ${arrivalMin}분 후 도착`
+    : '곧 도착';
+
+  if (r.isTransfer) {
+    return `<div class="route-card transfer-card" onclick="showDetail(${idx})">
+      ${isBest ? '<div class="best-label">추천</div>' : ''}
+      <div class="rc-top">
+        <span class="rc-time">${r.minutes}분</span>
+        <span class="rc-badge badge-transfer">1회 환승</span>
+        <span style="font-size:11px;color:#aaa;margin-left:auto">${arrivalText}</span>
+      </div>
+      <div class="rc-route">
+        <span class="bus-pill">${r.route['번호']}번</span>
+        <span class="route-arrow">→ ${r.transferHub} →</span>
+        <span class="bus-pill">${r.route2['번호']}번</span>
+      </div>
+      <div class="rc-next">첫 버스 <strong>${r.nextBus}</strong> · <span style="color:#1D9E75">${waitText}</span> · 환승 후 <strong>${r.nextBus2}</strong></div>
+    </div>`;
+  }
+
+  const isOutside = r.route['노선군'].includes('타시도');
+  return `<div class="route-card ${isBest ? 'best' : ''}" onclick="showDetail(${idx})">
+    ${isBest ? '<div class="best-label">추천</div>' : ''}
+    <div class="rc-top">
+      <span class="rc-time">${r.minutes}분</span>
+      <span class="rc-badge ${isBest ? 'badge-best' : 'badge-alt'}">${isBest ? '최단 직행' : '직행'}</span>
+      ${isOutside ? '<span class="rc-badge" style="background:#FFF3E0;color:#E65100">광역</span>' : ''}
+      <span style="font-size:11px;color:#aaa;margin-left:auto">${arrivalText}</span>
+    </div>
+    <div class="rc-route">
+      <span class="bus-pill">${r.route['번호']}번</span>
+      <span class="route-arrow">${r.route['노선군'].replace(/타시도\s*/g,'').replace(/[0-9~]/g,'').trim().substring(0,6)}</span>
+      <span style="font-size:11px;color:#aaa">${r.distanceKm}km</span>
+    </div>
+    <div class="rc-info">${r.stops.slice(0,4).join(' → ')}${r.stops.length > 4 ? ' ...' : ''}</div>
+    <div class="rc-next">다음 버스 <strong>${r.nextBus}</strong> · <span style="color:#1D9E75">${waitText}</span></div>
+  </div>`;
 }
 
 function buildTimetableHtml(route, nextBus, dayType, accentColor) {
@@ -1257,20 +1292,12 @@ function initDetailMap(result) {
   const container = document.getElementById('map-detail');
   if (!container) return;
 
-  if (mapDetail) {
-    mapDetail = null;
-    container.innerHTML = '';
-  }
+  if (mapDetail) { mapDetail = null; container.innerHTML = ''; }
 
-  const fromName = searchState.from ? searchState.from.name : '서천터미널';
-  const toName = searchState.to ? searchState.to.name : '';
-
-  const fromStop = searchState.from?.lat
-    ? searchState.from
-    : STOPS.find(s => s.name.includes(fromName.substring(0,4)));
-  const toStop = searchState.to?.lat
-    ? searchState.to
-    : STOPS.find(s => s.name.includes(toName.substring(0,4)));
+  const fromStop = searchState.from?.lat ? searchState.from
+    : STOPS.find(s => s.name.includes((searchState.from?.name||'서천터미널').substring(0,4)));
+  const toStop = searchState.to?.lat ? searchState.to
+    : STOPS.find(s => s.name.includes((searchState.to?.name||'').substring(0,4)));
 
   const centerLat = fromStop ? fromStop.lat : myLocation.lat;
   const centerLng = fromStop ? fromStop.lng : myLocation.lng;
@@ -1280,66 +1307,109 @@ function initDetailMap(result) {
     level: 9
   });
 
-  // 경유 정류장 좌표 수집
-  const routeStops = result.stops || [];
-  const coordList = [];
+  // 경유 정류장 좌표 수집 (ROUTE_COORDS 활용)
+  const routeCoords = result.coords || [];
+  const validCoords = routeCoords.filter(c => c.lat);
 
-  routeStops.forEach((stopName, i) => {
-    const matched = STOPS.find(s => s.name.includes(stopName.substring(0,4)));
-    if (!matched) return;
-    const latlng = new kakao.maps.LatLng(matched.lat, matched.lng);
-    coordList.push(latlng);
+  // 출발/탑승/도착 마커
+  const addMarker = (lat, lng, label, color) => {
+    const latlng = new kakao.maps.LatLng(lat, lng);
+    new kakao.maps.CustomOverlay({
+      position: latlng,
+      content: `<div style="display:flex;flex-direction:column;align-items:center">
+        <div style="background:${color};color:#fff;border-radius:10px;padding:2px 7px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,.2)">${label}</div>
+        <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid ${color};margin-top:-1px"></div>
+        <div style="width:8px;height:8px;background:${color};border:2px solid #fff;border-radius:50%"></div>
+      </div>`,
+      yAnchor: 1.1, zIndex: 5
+    }).setMap(mapDetail);
+  };
 
+  // 중간 정류장 작은 점
+  validCoords.forEach((c, i) => {
     const isFirst = i === 0;
-    const isLast = i === routeStops.length - 1;
-    const isBoard = i === 1;
-
-    if (isFirst || isLast || isBoard) {
-      // 주요 정류장만 마커+라벨
-      const color = isFirst ? '#185FA5' : isLast ? '#1D9E75' : '#EF9F27';
-      const label = isFirst ? '출발' : isLast ? '도착' : '탑승';
+    const isLast = i === validCoords.length - 1;
+    if (!isFirst && !isLast) {
       new kakao.maps.CustomOverlay({
-        position: latlng,
-        content: `<div style="background:${color};color:#fff;border-radius:20px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.2);margin-bottom:2px">${label}</div>`,
-        yAnchor: 2.2
-      }).setMap(mapDetail);
-      new kakao.maps.CustomOverlay({
-        position: latlng,
-        content: `<div style="width:10px;height:10px;background:${color};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>`,
-        yAnchor: 0.5
-      }).setMap(mapDetail);
-    } else {
-      // 중간 정류장은 작은 점
-      new kakao.maps.CustomOverlay({
-        position: latlng,
+        position: new kakao.maps.LatLng(c.lat, c.lng),
         content: `<div style="width:6px;height:6px;background:#1D9E75;border:1.5px solid #fff;border-radius:50%;opacity:0.7"></div>`,
-        yAnchor: 0.5
+        yAnchor: 0.5, zIndex: 3
       }).setMap(mapDetail);
     }
   });
 
-  // 노선 폴리라인 그리기
-  if (coordList.length >= 2) {
-    new kakao.maps.Polyline({
-      map: mapDetail,
-      path: coordList,
-      strokeWeight: 4,
-      strokeColor: '#1D9E75',
-      strokeOpacity: 0.8,
-      strokeStyle: 'solid'
-    });
-  }
+  if (fromStop) addMarker(fromStop.lat, fromStop.lng, '출발', '#185FA5');
+  if (toStop) addMarker(toStop.lat, toStop.lng, '도착', '#E24B4A');
 
-  // 지도 범위 자동 조정
-  if (coordList.length >= 2) {
-    const bounds = new kakao.maps.LatLngBounds();
-    coordList.forEach(ll => bounds.extend(ll));
-    mapDetail.setBounds(bounds, 60);
-  } else if (fromStop && toStop) {
-    const bounds = new kakao.maps.LatLngBounds();
-    bounds.extend(new kakao.maps.LatLng(fromStop.lat, fromStop.lng));
-    bounds.extend(new kakao.maps.LatLng(toStop.lat, toStop.lng));
-    mapDetail.setBounds(bounds, 60);
+  // 순환선 여부 확인 (동일 지점 2회 이상 통과)
+  const isCircular = result.route && (result.route['기점'] === result.route['종점'] || result.route['경유']?.includes('↔'));
+
+  // OSRM으로 도로 기반 경로 요청
+  if (validCoords.length >= 2) {
+    const waypoints = validCoords
+      .filter((_, i) => i === 0 || i === validCoords.length - 1 || i % Math.ceil(validCoords.length / 8) === 0)
+      .slice(0, 10); // OSRM 최대 경유지 제한
+
+    const coords = waypoints.map(c => `${c.lng},${c.lat}`).join(';');
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+
+    fetch(osrmUrl)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.routes?.[0]?.geometry?.coordinates) return;
+        const path = data.routes[0].geometry.coordinates.map(
+          ([lng, lat]) => new kakao.maps.LatLng(lat, lng)
+        );
+
+        // 도로 기반 폴리라인
+        new kakao.maps.Polyline({
+          map: mapDetail,
+          path,
+          strokeWeight: 5,
+          strokeColor: '#1D9E75',
+          strokeOpacity: 0.85,
+          strokeStyle: 'solid'
+        });
+
+        // 순환선: 중간마다 방향 화살표 오버레이
+        if (isCircular && path.length > 4) {
+          const step = Math.floor(path.length / 4);
+          [step, step*2, step*3].forEach(idx => {
+            if (idx >= path.length - 1) return;
+            const p1 = path[idx], p2 = path[idx + 1];
+            const angle = Math.atan2(
+              p2.getLng() - p1.getLng(),
+              p2.getLat() - p1.getLat()
+            ) * 180 / Math.PI;
+            const mid = new kakao.maps.LatLng(
+              (p1.getLat() + p2.getLat()) / 2,
+              (p1.getLng() + p2.getLng()) / 2
+            );
+            new kakao.maps.CustomOverlay({
+              position: mid,
+              content: `<div style="transform:rotate(${angle}deg);font-size:16px;color:#1D9E75;font-weight:900;text-shadow:0 0 3px #fff">▲</div>`,
+              yAnchor: 0.5, zIndex: 4
+            }).setMap(mapDetail);
+          });
+        }
+
+        // 지도 범위 조정
+        const bounds = new kakao.maps.LatLngBounds();
+        path.forEach(p => bounds.extend(p));
+        mapDetail.setBounds(bounds, 60);
+      })
+      .catch(() => {
+        // OSRM 실패 시 직선 폴리라인 fallback
+        const path = validCoords.map(c => new kakao.maps.LatLng(c.lat, c.lng));
+        new kakao.maps.Polyline({
+          map: mapDetail, path,
+          strokeWeight: 4, strokeColor: '#1D9E75',
+          strokeOpacity: 0.7, strokeStyle: 'dashed'
+        });
+        const bounds = new kakao.maps.LatLngBounds();
+        path.forEach(p => bounds.extend(p));
+        mapDetail.setBounds(bounds, 60);
+      });
   }
 }
 
