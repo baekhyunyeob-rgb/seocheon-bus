@@ -103,8 +103,20 @@ html, body {
 .dot-end   { background: var(--red); }
 
 .loc-vline {
-  width: 2px; height: 10px;
-  background: #ddd;
+  width: 2px; height: 8px;
+  background: linear-gradient(to bottom, var(--blue), #aaa);
+  position: relative;
+}
+.loc-vline::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid #aaa;
 }
 
 .loc-input {
@@ -308,6 +320,10 @@ html, body {
   padding: 12px 14px;
   border: 1px solid #e8f5f0;
   border-left: 3px solid #1D9E75;
+}
+.tt-fill.ret {
+  border: 0.8px solid var(--gray-border);
+  border-left: 0.8px solid var(--gray-border);
 }
 .tt-fill-title { font-size: 11px; font-weight: 700; color: var(--gray-text); margin-bottom: 8px; }
 .tt-grid {
@@ -815,13 +831,14 @@ html, body {
   padding: 4px 2px;
 }
 .tab.active { color: var(--text); }
-.tab span { font-size: 9px; font-weight: 700; line-height: 1; color: inherit; white-space: nowrap; }
+.tab span { font-size: 9px; font-weight: 700; line-height: 1; color: #bbb; white-space: nowrap; }
+.tab.active span { font-weight: 700; }
 .tab svg { flex-shrink: 0; opacity: 0.35; }
 .tab.active svg { opacity: 1; }
-#tab-home.active span { color: #1D9E75; }
-#tab-routes.active span { color: #185FA5; }
+#tab-home.active span      { color: #1D9E75; }
+#tab-routes.active span    { color: #185FA5; }
 #tab-transport.active span { color: #7F77DD; }
-#tab-favorites.active span { color: #E24B4A; }
+#tab-favorites.active span { color: #F5A623; }
 
 /* ===== 로딩 ===== */
 .loading {
