@@ -807,6 +807,27 @@ function routeTotalMin(r) {
   return Math.round((r['거리'] || 10) * 2.5 + 5);
 }
 
+// 특정 좌표 반경 300m 이내 정류장 좌표 배열 반환 (자기 자신 포함)
+function getNearbyCoords(lat, lng, radiusM = 300) {
+  const candidates = STOPS.filter(s => coordDist(s.lat, s.lng, lat, lng) <= radiusM);
+  if (candidates.length === 0) return [{ lat, lng }];
+  return candidates.map(s => ({ lat: s.lat, lng: s.lng }));
+}
+
+// 좌표 배열 중 하나라도 노선 경유지에 걸리면 그 인덱스 반환 (가장 좋은 매칭)
+function findCoordIdxMulti(coords, latLngs, thresholdM = 1500) {
+  let bestIdx = -1, bestDist = thresholdM;
+  for (const { lat, lng } of latLngs) {
+    const idx = findCoordIdx(coords, lat, lng, thresholdM);
+    if (idx !== -1) {
+      // 실제 거리 계산해서 가장 가까운 것 선택
+      const d = coordDist(coords[idx].lat, coords[idx].lng, lat, lng);
+      if (d < bestDist) { bestDist = d; bestIdx = idx; }
+    }
+  }
+  return bestIdx;
+}
+
 function findRoutes(fromName, toName, searchTime, dayType) {
   const results = [];
 
@@ -838,17 +859,23 @@ function findRoutes(fromName, toName, searchTime, dayType) {
 
   if (!toLat) return results; // 도착지 좌표 없으면 검색 불가
 
+  // 출발지/도착지 반경 300m 내 정류장 좌표 배열
+  const toCoords   = getNearbyCoords(toLat, toLng);
+  const fromCoords = (fromLat && !isGps) ? getNearbyCoords(fromLat, fromLng) : null;
+
   // 직행 탐색 (좌표 기반)
   ROUTES.forEach(route => {
     const coords = getRouteCoords(route);
     if (!coords.length) return;
 
-    const toIdx = findCoordIdx(coords, toLat, toLng);
+    const toIdx = findCoordIdxMulti(coords, toCoords);
     if (toIdx === -1) return;
 
     let fromIdx = -1;
     if (fromLat) {
-      fromIdx = findCoordIdx(coords, fromLat, fromLng);
+      fromIdx = fromCoords
+        ? findCoordIdxMulti(coords, fromCoords)
+        : findCoordIdx(coords, fromLat, fromLng);
     }
 
     if (!isGps && fromIdx === -1) return;
@@ -924,11 +951,11 @@ function findRoutes(fromName, toName, searchTime, dayType) {
       return (isGps || fi !== -1) && (fi === -1 || fi < hi);
     });
 
-    // 2구간: hub → to 경유 노선
+    // 2구간: hub → to 경유 노선 (도착지 반경 300m 포함)
     const leg2Routes = ROUTES.filter(r => {
       const coords = getRouteCoords(r);
       const hi = findCoordIdx(coords, hubLat, hubLng);
-      const ti = findCoordIdx(coords, toLat, toLng);
+      const ti = findCoordIdxMulti(coords, toCoords);
       return hi !== -1 && ti !== -1 && hi < ti;
     });
 
@@ -989,6 +1016,11 @@ function findRoutes(fromName, toName, searchTime, dayType) {
         const bus1Str = `${String(Math.floor(bestBus1.depMin/60)).padStart(2,'0')}:${String(bestBus1.depMin%60).padStart(2,'0')}`;
         const bus2Str = `${String(Math.floor(bus2Min/60)).padStart(2,'0')}:${String(bus2Min%60).padStart(2,'0')}`;
 
+        // 2구간 버스의 허브 통과 시각 = 기점출발 + (기점→허브 구간 소요시간)
+        const leg2Leg0Min = segMin(r2, r2Coords, 0, r2HubIdx >= 0 ? r2HubIdx : 0);
+        const hub2BoardMin = bus2Min + leg2Leg0Min;
+        const hub2BoardStr = `${String(Math.floor(hub2BoardMin/60)).padStart(2,'0')}:${String(hub2BoardMin%60).padStart(2,'0')}`;
+
         const isDup = results.some(res =>
           res.isTransfer &&
           res.route['번호'] === r1['번호'] &&
@@ -1005,9 +1037,10 @@ function findRoutes(fromName, toName, searchTime, dayType) {
           route: r1, route2: r2,
           stops: getRouteStops(r1),
           stops2: getRouteStops(r2),
-          nextBus: bus1Str,   // 기점 출발 시각 (표시용)
+          nextBus: bus1Str,        // 1구간 기점 출발 시각
           boardTime: `${String(Math.floor(bestBus1.boardMin/60)).padStart(2,'0')}:${String(bestBus1.boardMin%60).padStart(2,'0')}`, // 실제 탑승 시각
-          nextBus2: bus2Str,
+          nextBus2: bus2Str,       // 2구간 기점 출발 시각 (내부용)
+          hub2BoardTime: hub2BoardStr, // 2구간 허브 실제 탑승 시각 (표시용)
           transferHub: hub,
           transferCount: 1,
           minutes: totalMinutes,
@@ -1225,7 +1258,7 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
   }
 
   // 복귀시에는
-  const returnRoute = findReturnRoute(best, dayType);
+  const returnRoute = findReturnRoute(dayType);
   if (returnRoute) {
     const retTimetableHtml = buildTimetableHtml(returnRoute.route, null, dayType, '#E24B4A');
     if (retTimetableHtml) {
@@ -1399,7 +1432,7 @@ function renderRouteCard(r, idx, isBest, dayType) {
       <div style="font-size:13px;color:#222">
         <span style="color:#185FA5;font-weight:700">${displayBoardTime}</span>
         <span style="color:#555;font-size:11px"> 출발</span>
-        <span style="color:#888;font-size:12px"> → ${r.nextBus2} 환승 →</span>
+        <span style="color:#888;font-size:12px"> → ${r.hub2BoardTime || r.nextBus2} 환승 →</span>
         <span style="color:#E24B4A;font-weight:700"> ${arriveTime2}</span>
         <span style="color:#555;font-size:11px"> 도착</span>
         <span style="color:#555;font-size:11px;float:right">${formatDuration(r.minutes)}</span>
@@ -1468,13 +1501,44 @@ function buildTimetableHtml(route, nextBus, dayType, accentColor) {
   </div>`;
 }
 
-function findReturnRoute(forwardResult, dayType) {
-  const from = forwardResult.route['종점'];
-  const to = forwardResult.route['기점'];
-  const matching = ROUTES.filter(r => {
-    return r['기점'].includes(from.substring(0,3)) || r['종점'].includes(from.substring(0,3));
+function findReturnRoute(dayType) {
+  // 원래 검색의 출발지/도착지를 뒤집어서 탐색
+  const retFromLat = searchState.to?.lat;
+  const retFromLng = searchState.to?.lng;
+  const retToLat   = searchState.from?.isGps ? myLocation.lat : searchState.from?.lat;
+  const retToLng   = searchState.from?.isGps ? myLocation.lng : searchState.from?.lng;
+
+  if (!retFromLat || !retToLat) return null;
+
+  const retFromCoords = getNearbyCoords(retFromLat, retFromLng);
+  const retToCoords   = getNearbyCoords(retToLat,   retToLng);
+
+  const now = new Date();
+  const candidates = [];
+
+  ROUTES.forEach(route => {
+    const coords = getRouteCoords(route);
+    if (!coords.length) return;
+
+    const fromIdx = findCoordIdxMulti(coords, retFromCoords);
+    const toIdx   = findCoordIdxMulti(coords, retToCoords);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx >= toIdx) return;
+
+    const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+    if (!(route[countKey] > 0) || !route['첫차'] || !route['막차']) return;
+
+    candidates.push(route);
   });
-  return matching.length > 0 ? { route: matching[0] } : null;
+
+  if (candidates.length === 0) return null;
+
+  // 가장 운행 횟수 많은 노선 우선
+  candidates.sort((a, b) => {
+    const key = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+    return (b[key] || 0) - (a[key] || 0);
+  });
+
+  return { route: candidates[0] };
 }
 
 // ==================== 경로 상세 ====================
