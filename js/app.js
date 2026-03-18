@@ -1037,10 +1037,13 @@ function findRoutes(fromName, toName, searchTime, dayType) {
           route: r1, route2: r2,
           stops: getRouteStops(r1),
           stops2: getRouteStops(r2),
-          nextBus: bus1Str,        // 1구간 기점 출발 시각
-          boardTime: `${String(Math.floor(bestBus1.boardMin/60)).padStart(2,'0')}:${String(bestBus1.boardMin%60).padStart(2,'0')}`, // 실제 탑승 시각
-          nextBus2: bus2Str,       // 2구간 기점 출발 시각 (내부용)
-          hub2BoardTime: hub2BoardStr, // 2구간 허브 실제 탑승 시각 (표시용)
+          nextBus: bus1Str,
+          boardTime: `${String(Math.floor(bestBus1.boardMin/60)).padStart(2,'0')}:${String(bestBus1.boardMin%60).padStart(2,'0')}`,
+          nextBus2: bus2Str,
+          hub2BoardTime: hub2BoardStr,
+          hub2BoardMin,           // 환승 가능 판단용 (분)
+          leg0Min,                // 기점→탑승지 소요시간
+          leg1Min,                // 탑승지→환승지 소요시간
           transferHub: hub,
           transferCount: 1,
           minutes: totalMinutes,
@@ -1224,7 +1227,7 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
     if (nearbyRoutes.length > 0) {
       hintHtml = `<div style="margin-top:12px;padding:10px;background:#f8f8f8;border-radius:8px;font-size:12px;color:#666">
         <div style="font-weight:700;margin-bottom:6px;color:#333">💡 "${toName}" 근처를 지나는 버스</div>
-        ${nearbyRoutes.map(r => `<div style="padding:3px 0">${r['번호']}번 · ${r['기점']} → ${r['종점']}</div>`).join('')}
+        ${nearbyRoutes.map(r => `<div style="padding:3px 0">${getBusDisplayNum(r)} · ${r['기점']} → ${r['종점']}</div>`).join('')}
         <div style="font-size:11px;color:#aaa;margin-top:6px">출발지를 변경하거나 환승을 시도해보세요</div>
       </div>`;
     }
@@ -1347,14 +1350,14 @@ function getRouteLineSummary(r) {
   return parts.join(`<span style="color:#999;margin:0 2px;font-size:11px">→</span>`);
 }
 
-function makeTimesRow(route, boardTime, dayType) {
+// 환승 카드용: 2구간 허브에 제때 도착할 수 있는 1구간 이후 버스만 표시
+// bus2HubMin: 2구간 버스 허브 탑승 시각(분), leg0Min: 기점→탑승지, leg1Min: 탑승지→허브
+function makeTransferTimesRow(route, currentBus, bus2HubMin, leg1Min, leg0Min, dayType) {
   const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
   const count = route[countKey] || 0;
   const firstStr = route['첫차'], lastStr = route['막차'];
   if (!count || !firstStr || !lastStr) return '';
 
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
   const [fh,fm] = firstStr.split(':').map(Number);
   const [lh,lm] = lastStr.split(':').map(Number);
   const fMin = fh*60+fm, lMin = lh*60+lm;
@@ -1365,21 +1368,52 @@ function makeTimesRow(route, boardTime, dayType) {
     times.push(String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'));
   }
 
-  // 지난 시간 및 현재 다음버스(boardTime) 제외 → 그 이후만 표시
+  const [ch,cm] = currentBus.split(':').map(Number);
+  const currentMin = ch*60+cm;
+  const deadline = bus2HubMin - 5;
+
+  const upcoming = times.filter(t => {
+    const [th,tm] = t.split(':').map(Number);
+    const depMin = th*60+tm;
+    if (depMin <= currentMin) return false;
+    const boardMin = depMin + leg0Min;
+    const hubArr = boardMin + leg1Min;
+    return hubArr <= deadline;
+  });
+
+  if (upcoming.length === 0) return '';
+  const chips = upcoming.map(t => `<div class="tt-chip"><div class="tt-chip-time">${t}</div></div>`).join('');
+  return `<div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
+    <span style="font-size:10px;color:#aaa;flex-shrink:0;padding-top:4px">이후</span>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;flex:1">${chips}</div>
+  </div>`;
+}
+
+function makeTimesRow(route, boardTime, dayType) {
+  const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+  const count = route[countKey] || 0;
+  const firstStr = route['첫차'], lastStr = route['막차'];
+  if (!count || !firstStr || !lastStr) return '';
+
+  const [fh,fm] = firstStr.split(':').map(Number);
+  const [lh,lm] = lastStr.split(':').map(Number);
+  const fMin = fh*60+fm, lMin = lh*60+lm;
+  const interval = count > 1 ? Math.round((lMin-fMin)/(count-1)) : 0;
+  const times = [];
+  for (let i = 0; i < count; i++) {
+    const t = fMin + interval*i;
+    times.push(String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'));
+  }
+
   const [bh, bm] = boardTime.split(':').map(Number);
   const boardMin = bh*60+bm;
   const upcoming = times.filter(t => {
     const [th,tm] = t.split(':').map(Number);
-    return th*60+tm > boardMin; // 다음버스 이후만
+    return th*60+tm > boardMin;
   });
   if (upcoming.length === 0) return '';
 
-  const chips = upcoming.map(t => {
-    return `<div class="tt-chip">
-      <div class="tt-chip-time">${t}</div>
-    </div>`;
-  }).join('');
-
+  const chips = upcoming.map(t => `<div class="tt-chip"><div class="tt-chip-time">${t}</div></div>`).join('');
   return `<div style="display:flex;align-items:flex-start;gap:6px;margin-top:8px">
     <span style="font-size:10px;color:#aaa;flex-shrink:0;padding-top:4px">이후</span>
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:3px;flex:1">${chips}</div>
@@ -1416,7 +1450,9 @@ function renderRouteCard(r, idx, isBest, dayType) {
       : estimateMinutes(r.route2['거리'] || 10);
     const arriveTime2 = calcArrivalTime(r.nextBus2, leg2TravelMin);
     const zoneColor2 = getZoneColor(r.route2);
-    const timesRow = makeTimesRow(r.route, r.nextBus, dayType);
+    const timesRow = r.hub2BoardMin != null
+      ? makeTransferTimesRow(r.route, r.nextBus, r.hub2BoardMin, r.leg1Min || 0, r.leg0Min || 0, dayType)
+      : makeTimesRow(r.route, r.nextBus, dayType);
     const busNum1 = getBusDisplayNum(r.route);
     const busNum2 = getBusDisplayNum(r.route2);
     const displayBoardTime = r.boardTime || r.nextBus;
@@ -1494,7 +1530,7 @@ function buildTimetableHtml(route, nextBus, dayType, accentColor) {
 
   return `<div class="tt-fill">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <span style="background:${color};color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">${route['번호']}번</span>
+      <span style="background:${color};color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">${getBusDisplayNum(route)}</span>
       <span style="font-size:12px;color:#555">${route['기점']} → ${route['종점']}</span>
     </div>
     <div class="tt-grid">${chipsHtml}</div>
@@ -1548,7 +1584,7 @@ function showDetail(idx) {
   detailRoute = results[idx];
 
   document.getElementById('live-bus-name').textContent =
-    `${detailRoute.route['번호']}번 ${detailRoute.route['노선군'].replace(/[0-9~번]/g,'').trim()} 운행중`;
+    `${getBusDisplayNum(detailRoute.route)} ${detailRoute.route['노선군'].replace(/[0-9~번]/g,'').trim()} 운행중`;
   document.getElementById('live-bus-status').textContent =
     `2정류장 전 통과 · ${detailRoute.nextBus} 출발 (탑승 준비)`;
 
@@ -1677,29 +1713,61 @@ function initDetailMap(result) {
     segCoords = allCoords.slice(fromI, toI + 1);
   }
 
-  // 구간 내 중간 정류장만 작은 점 (출발/도착 제외)
-  segCoords.forEach((c, i) => {
-    if (i === 0 || i === segCoords.length - 1) return;
-    new kakao.maps.CustomOverlay({
-      position: new kakao.maps.LatLng(c.lat, c.lng),
-      content: `<div style="width:6px;height:6px;background:#1D9E75;border:1.5px solid #fff;border-radius:50%;opacity:0.7"></div>`,
-      yAnchor: 0.5, zIndex: 3
-    }).setMap(mapDetail);
-  });
-
-  // 구간 폴리라인 (직선)
+  // 구간 폴리라인 — 노선 권역 색상으로
+  const lineColor = result.route ? getZoneColor(result.route) : '#1D9E75';
   if (segCoords.length >= 2) {
     const path = segCoords.map(c => new kakao.maps.LatLng(c.lat, c.lng));
     new kakao.maps.Polyline({
       map: mapDetail, path,
-      strokeWeight: 4, strokeColor: '#1D9E75',
-      strokeOpacity: 0.8, strokeStyle: 'solid'
+      strokeWeight: 4, strokeColor: lineColor,
+      strokeOpacity: 0.85, strokeStyle: 'solid'
     });
   }
+
+  // 중간 정류장 점도 같은 색
+  segCoords.forEach((c, i) => {
+    if (i === 0 || i === segCoords.length - 1) return;
+    new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(c.lat, c.lng),
+      content: `<div style="width:6px;height:6px;background:${lineColor};border:1.5px solid #fff;border-radius:50%;opacity:0.7"></div>`,
+      yAnchor: 0.5, zIndex: 3
+    }).setMap(mapDetail);
+  });
 
   // 출발/도착 마커
   if (fromStop) addMarker(fromStop.lat, fromStop.lng, '출발', '#185FA5');
   if (toStop)   addMarker(toStop.lat,   toStop.lng,   '도착', '#E24B4A');
+
+  // 복귀 노선도 지도에 함께 표시 (점선 + 연한 색)
+  const returnRoute = findReturnRoute(result.dayType || getDayType());
+  if (returnRoute) {
+    const retCoords = (getRouteCoords(returnRoute.route) || []).filter(c => c.lat);
+    if (retCoords.length >= 2) {
+      // 도착지→출발지 구간만 추출
+      let retFrom = toStop, retTo = fromStop;
+      let rfI = 0, rfD = 9999999, rtI = retCoords.length-1, rtD = 9999999;
+      retCoords.forEach((c, i) => {
+        if (retFrom) {
+          const d = coordDist(c.lat, c.lng, retFrom.lat, retFrom.lng);
+          if (d < rfD) { rfD = d; rfI = i; }
+        }
+        if (retTo) {
+          const d = coordDist(c.lat, c.lng, retTo.lat, retTo.lng);
+          if (d < rtD) { rtD = d; rtI = i; }
+        }
+      });
+      if (rfI > rtI) { const tmp = rfI; rfI = rtI; rtI = tmp; }
+      const retSeg = retCoords.slice(rfI, rtI + 1);
+      if (retSeg.length >= 2) {
+        new kakao.maps.Polyline({
+          map: mapDetail,
+          path: retSeg.map(c => new kakao.maps.LatLng(c.lat, c.lng)),
+          strokeWeight: 3, strokeColor: '#E24B4A',
+          strokeOpacity: 0.45, strokeStyle: 'shortdash'
+        });
+      }
+    }
+  }
 
   // 지도 범위 조정
   const bounds = new kakao.maps.LatLngBounds();
@@ -1745,18 +1813,53 @@ function selectZone(zoneId) {
 }
 
 function getZoneColor(route) {
-  const name = route['노선군'] + route['번호'];
-  for (let i = 1; i < ZONES.length; i++) {
-    const z = ZONES[i];
-    if (z.keywords.some(k => name.includes(k))) return z.color;
+  const group = route['노선군'] || '';
+  const num = route['번호'] || '';
+  const numInt = parseInt(num) || 0;
+
+  // 노선군 문자열로 먼저 매핑 (가장 정확)
+  if (group.includes('장항') || group.includes('동백') ||
+      group.includes('100번대') || group.includes('200번대') ||
+      group.includes('북산') || group.includes('하구둑') ||
+      group.includes('산내') || group.includes('장상')) {
+    // 장항권 (파랑)
+    if (group.includes('동백') && !group.includes('장항')) return ZONES[2].color;
+    return ZONES[1].color;
   }
-  // 번호 기반 매핑
-  const num = parseInt(route['번호']) || 0;
-  if (num >= 10 && num < 30) return ZONES[1].color; // 장항
-  if (num >= 1 && num < 10) return ZONES[2].color;  // 동백
-  if (num >= 30 && num < 40) return ZONES[3].color; // 한산
-  if (num >= 40 && num < 60) return ZONES[4].color; // 판교
-  return '#888';
+  if (group.includes('한산') || group.includes('300번대') || group.includes('400번대')) {
+    return ZONES[3].color; // 한산 (주황)
+  }
+  if (group.includes('판교') || group.includes('40번대') ||
+      group.includes('500번대') || group.includes('문산') || group.includes('50번대')) {
+    return ZONES[4].color; // 판교 (보라)
+  }
+  if (group.includes('마서') || group.includes('700번대') ||
+      group.includes('600번대') || group.includes('기산') || group.includes('종천')) {
+    return ZONES[5].color; // 마서 (진녹)
+  }
+  if (group.includes('화양') || group.includes('60번대') ||
+      group.includes('봉선') || group.includes('70번대') ||
+      group.includes('800번대') || group.includes('당정') || group.includes('80번대') ||
+      group.includes('비인') || group.includes('90번대')) {
+    // 동백·서면 권역 (빨강)
+    return ZONES[2].color;
+  }
+  if (group.includes('타시도')) return '#888';
+
+  // fallback: 번호대 기반
+  if (numInt >= 100 && numInt < 200) return ZONES[1].color; // 장항
+  if (numInt >= 200 && numInt < 300) return ZONES[1].color; // 장항
+  if (numInt >= 300 && numInt < 500) return ZONES[3].color; // 한산
+  if (numInt >= 500 && numInt < 600) return ZONES[4].color; // 판교
+  if (numInt >= 600 && numInt < 800) return ZONES[5].color; // 마서
+  if (numInt >= 800 && numInt < 900) return ZONES[2].color; // 동백·서면
+  if (numInt >= 10 && numInt < 30)   return ZONES[1].color; // 장항
+  if (numInt >= 1  && numInt < 10)   return ZONES[2].color; // 동백
+  if (numInt >= 30 && numInt < 40)   return ZONES[3].color; // 한산
+  if (numInt >= 40 && numInt < 60)   return ZONES[4].color; // 판교
+  if (numInt >= 60 && numInt < 80)   return ZONES[2].color; // 동백·서면
+  if (numInt >= 80 && numInt < 100)  return ZONES[2].color; // 동백·서면
+  return ZONES[1].color; // 기본: 장항
 }
 
 function renderRouteList(zoneId) {
@@ -1783,7 +1886,7 @@ function renderRouteList(zoneId) {
   container.innerHTML = filtered.map((r, idx) => {
     const color = getZoneColor(r);
     return `<div class="route-list-item" onclick="showRouteTimetable('${r['번호']}', ${idx})">
-      <span class="rli-num" style="background:${color}">${r['번호']}</span>
+      <span class="rli-num" style="background:${color}">${getBusDisplayNum(r)}</span>
       <div class="rli-info">
         <div class="rli-name">${r['노선군']}</div>
         <div class="rli-sub">${r['기점']} ↔ ${r['종점']} · ${r['거리']}km</div>
@@ -1850,7 +1953,7 @@ function showRouteTimetable(routeNum, idx) {
     <div style="width:40px;height:4px;background:#e0e0e0;border-radius:2px;margin:0 auto 16px"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div>
-        <span style="background:#1D9E75;color:#fff;border-radius:6px;padding:3px 10px;font-weight:600;font-size:15px">${route['번호']}번</span>
+        <span style="background:#1D9E75;color:#fff;border-radius:6px;padding:3px 10px;font-weight:600;font-size:15px">${getBusDisplayNum(route)}</span>
         <span style="margin-left:8px;font-size:14px;color:#333">${route['노선군']}</span>
       </div>
       <button onclick="document.getElementById('route-tt-panel').remove();document.getElementById('route-tt-overlay').remove()" style="background:none;border:none;font-size:20px;color:#999;cursor:pointer">✕</button>
