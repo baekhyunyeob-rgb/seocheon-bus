@@ -1964,6 +1964,17 @@ function initDetailMap(result) {
   if (fromStop || toStop) mapDetail.setBounds(bounds, 80);
 }
 
+// 노선도 뒤로가기 — 시간표에서 왔으면 시간표로, 아니면 홈으로
+function routesBack() {
+  if (_timetableReturnScreen) {
+    const target = _timetableReturnScreen;
+    _timetableReturnScreen = null;
+    showScreen(target);
+  } else {
+    showScreen('home');
+  }
+}
+
 // ==================== 노선도 ====================
 function initZoneTabs() {
   const container = document.getElementById('zone-tabs');
@@ -2094,6 +2105,33 @@ function renderLegend() {
   container.innerHTML = ZONES.slice(1).map(z =>
     `<div class="legend-item"><div class="legend-line" style="background:${z.color}"></div>${z.name}</div>`
   ).join('');
+}
+
+// 버스시간표에서 노선번호 클릭 → 노선도 화면에서 해당 노선 표시
+// 노선도 화면의 뒤로가기 버튼이 시간표 화면으로 복귀하도록 처리
+let _timetableReturnScreen = null;
+
+function showRouteFromTimetable(busNum, terminus) {
+  // 현재 화면(timetable)을 기억
+  _timetableReturnScreen = 'timetable';
+
+  // 노선도 화면으로 이동
+  showScreen('routes');
+
+  // 해당 노선 찾아서 시간표 팝업 열기
+  setTimeout(() => {
+    const route = ROUTES.find(r =>
+      getBusDisplayNum(r) === busNum ||
+      r['번호'] === busNum.replace(/\(.*\)/,'').trim()
+    );
+    if (route) {
+      const idx = window._filteredRoutes
+        ? window._filteredRoutes.indexOf(route)
+        : -1;
+      showRouteTimetable(route['번호'], idx >= 0 ? idx : undefined);
+      showRouteOnMap(route);
+    }
+  }, 150);
 }
 
 function showRouteTimetable(routeNum, idx) {
@@ -2514,12 +2552,12 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
   </div>`;
 
   // 헤더
-  html += `<div style="display:grid;grid-template-columns:52px 52px 1fr 72px auto;gap:0;background:#f8f8f8;border-top:.5px solid #e0e0e0;border-bottom:.5px solid #e0e0e0;padding:6px 12px;font-size:10px;font-weight:700;color:#888">
+  html += `<div style="display:grid;grid-template-columns:48px 62px 1fr 68px 48px;gap:0;background:#f8f8f8;border-top:.5px solid #e0e0e0;border-bottom:.5px solid #e0e0e0;padding:5px 10px;font-size:10px;font-weight:700;color:#888">
     <div>시간</div>
     <div>노선</div>
     <div>주요 경유지</div>
     <div>종점</div>
-    <div>비고</div>
+    <div style="text-align:right">비고</div>
   </div>`;
 
   allRows.forEach((r, i) => {
@@ -2529,12 +2567,13 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     const timeColor = r.isPast ? '#ccc' : isNext ? '#E24B4A' : '#185FA5';
     const textColor = r.isPast ? '#ccc' : '#444';
 
-    html += `<div style="display:grid;grid-template-columns:52px 52px 1fr 72px auto;gap:0;background:${rowBg};border-bottom:.5px solid #f0f0f0;padding:7px 12px;align-items:center">
+    html += `<div style="display:grid;grid-template-columns:48px 62px 1fr 68px 48px;gap:0;background:${rowBg};border-bottom:.5px solid #f0f0f0;padding:6px 10px;align-items:center">
       <div style="font-size:13px;font-weight:700;color:${timeColor};${r.isPast?'text-decoration:line-through':''}">${r.passStr}</div>
-      <div><span style="background:${r.color};color:#fff;border-radius:5px;padding:2px 5px;font-size:10px;font-weight:700">${r.busNum}</span></div>
-      <div style="font-size:11px;color:${textColor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.viaStr}</div>
-      <div style="font-size:11px;color:${r.isPast?'#ccc':'#333'};font-weight:${isNext?'700':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.terminus}</div>
-      <div style="font-size:9px;color:#aaa;text-align:right;white-space:nowrap">${r.remark}</div>
+      <div><span onclick="showRouteFromTimetable('${r.busNum.replace(/'/g,"\'")}', '${r.terminus.replace(/'/g,"\'")}');event.stopPropagation()"
+        style="background:${r.color};color:#fff;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700;cursor:pointer;display:inline-block">${r.busNum}</span></div>
+      <div style="font-size:10px;color:${textColor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:4px">${r.viaStr}</div>
+      <div style="font-size:10px;color:${r.isPast?'#ccc':'#333'};font-weight:${isNext?'700':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.terminus}</div>
+      <div style="font-size:9px;color:#888;text-align:right;white-space:nowrap;line-height:1.3">${r.remark}</div>
     </div>`;
   });
 
