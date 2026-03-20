@@ -96,9 +96,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('popstate', (e) => {
     const screen = e.state?.screen || 'home';
 
-    if (screen === 'transport-detail') {
-      // 상세→카드목록: 화면만 복원 (이미 transport history 항목이 아래 있음)
-      closeHubDetail();
+    if (screen === 'transport') {
+      const detail = document.getElementById('hub-detail');
+      if (detail && detail.style.display !== 'none') {
+        // 상세화면 → 카드목록 (스택에 transport가 하나 더 있음)
+        closeHubDetail();
+        return;
+      }
+      // 카드목록 → 홈
+      showScreenNoHistory('home');
+      history.replaceState({ screen: 'home' }, '', '');
       return;
     }
 
@@ -2355,8 +2362,8 @@ function showHubDetail(idx) {
   grid.style.display = 'none';
   if (hint) hint.style.display = 'none';
   detail.style.display = 'block';
-  // 폰 뒤로가기를 위해 별도 history 항목 추가
-  history.pushState({ screen: 'transport-detail' }, '', '');
+  // 뒤로가기를 위해 transport 항목 하나 더 쌓기
+  history.pushState({ screen: 'transport' }, '', '');
 
   let html = `<div class="hub-detail-back" onclick="closeHubDetail()">
     <span class="hub-detail-back-btn">‹</span>
@@ -2445,7 +2452,8 @@ function switchDirection(dir, hubId) {
 function transportBack() {
   const detail = document.getElementById('hub-detail');
   if (detail && detail.style.display !== 'none') {
-    closeHubDetail();
+    // 폰 뒤로가기와 동일하게 history.back() 호출 → popstate에서 처리
+    history.back();
   } else {
     showScreen('home');
   }
