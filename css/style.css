@@ -835,9 +835,10 @@ html, body {
 .tab.active span { font-weight: 700; }
 .tab svg { flex-shrink: 0; opacity: 0.35; }
 .tab.active svg { opacity: 1; }
-#tab-home.active span      { color: #1D9E75; }
-#tab-routes.active span    { color: #185FA5; }
-#tab-transport.active span { color: #7F77DD; }
+#tab-home.active span       { color: #1D9E75; }
+#tab-timetable.active span  { color: #EF9F27; }
+#tab-routes.active span     { color: #185FA5; }
+#tab-transport.active span  { color: #7F77DD; }
 #tab-favorites.active span { color: #F5A623; }
 
 /* ===== 로딩 ===== */

@@ -2372,6 +2372,171 @@ function closeHubDetail() {
   detail.innerHTML = '';
 }
 
+// ==================== 정류장 시간표 ====================
+
+function onStopSearchInput(val) {
+  const resultsEl = document.getElementById('stop-search-results');
+  if (!val.trim()) {
+    resultsEl.style.display = 'none';
+    return;
+  }
+  const matches = STOPS.filter(s => s.name.includes(val.trim()))
+    .filter((s, i, arr) => arr.findIndex(x => x.name === s.name) === i) // 중복 제거
+    .slice(0, 15);
+
+  if (matches.length === 0) {
+    resultsEl.style.display = 'none';
+    return;
+  }
+
+  resultsEl.innerHTML = matches.map(s => {
+    const display = s.displayName || s.name;
+    return `<div onclick="selectStopForTimetable('${s.name.replace(/'/g,"\\'")}', '${display.replace(/'/g,"\\'")}', ${s.lat}, ${s.lng})"
+      style="padding:10px 14px;border-bottom:.5px solid #f5f5f5;cursor:pointer;font-size:13px;color:#222;display:flex;align-items:center;gap:8px">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5" stroke="#EF9F27" stroke-width="1.3"/><path d="M7 4v3l2 2" stroke="#EF9F27" stroke-width="1.1" stroke-linecap="round"/></svg>
+      ${display}
+    </div>`;
+  }).join('');
+  resultsEl.style.display = 'block';
+}
+
+function clearStopSearch() {
+  document.getElementById('stop-search-input').value = '';
+  document.getElementById('stop-search-results').style.display = 'none';
+  document.getElementById('timetable-body').innerHTML =
+    '<div style="text-align:center;padding:40px 20px;color:#bbb;font-size:13px">정류장명을 검색하세요</div>';
+}
+
+function selectStopForTimetable(stopName, displayName, lat, lng) {
+  document.getElementById('stop-search-input').value = displayName;
+  document.getElementById('stop-search-results').style.display = 'none';
+  renderStopTimetable(stopName, displayName, lat, lng);
+}
+
+function renderStopTimetable(stopName, displayName, lat, lng) {
+  const dayType = getDayType();
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  // 이 정류장을 지나는 노선 탐색 (좌표 기반, 300m)
+  const stopCoords = getNearbyCoords(lat, lng, 300);
+  const passingRoutes = [];
+
+  ROUTES.forEach(route => {
+    const coords = getRouteCoords(route);
+    if (!coords.length) return;
+    const idx = findCoordIdxMulti(coords, stopCoords, 300);
+    if (idx === -1) return;
+
+    // 이 정류장에서의 통과 시각 계산
+    const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+    const countWeekday = route['평일횟수'] || 0;
+    const countSat     = route['토요일횟수'] || 0;
+    const countHol     = route['공휴일횟수'] || 0;
+    const count = route[countKey] || 0;
+    if (!count || !route['첫차'] || !route['막차']) return;
+
+    // 기점출발 시간표 생성
+    const [fh,fm] = route['첫차'].split(':').map(Number);
+    const [lh,lm] = route['막차'].split(':').map(Number);
+    const fMin=fh*60+fm, lMin=lh*60+lm;
+    const interval = count > 1 ? Math.round((lMin-fMin)/(count-1)) : 0;
+
+    // 이 정류장 통과 시각 = 기점출발 + leg0
+    const totalMin = routeTotalMin(route);
+    const len = Math.max(coords.length-1, 1);
+    const leg0 = Math.round(totalMin * idx / len);
+
+    const times = [];
+    for (let i = 0; i < count; i++) {
+      const depMin = fMin + interval*i;
+      const passMin = depMin + leg0;
+      times.push({
+        dep: `${String(Math.floor(depMin/60)).padStart(2,'0')}:${String(depMin%60).padStart(2,'0')}`,
+        pass: `${String(Math.floor(passMin/60)%24).padStart(2,'0')}:${String(passMin%60).padStart(2,'0')}`,
+        passMin,
+        isPast: passMin < nowMin
+      });
+    }
+
+    // 경유지에서 주요 허브 추출 (이 정류장 이후 구간, 최대 4개)
+    const viaList = [route['기점'], ...route['경유'].split('→').map(s=>s.trim()).filter(Boolean), route['종점']];
+    const MAIN_HUBS = ['서천터미널','한산공용터미널','장항터미널','서천역','판교','기산','문산','화양','비인','마서','종천','장항읍내'];
+    const afterHubs = [];
+    let passedStop = false;
+    for (const v of viaList) {
+      if (v.includes(stopName.substring(0,3))) passedStop = true;
+      if (passedStop && afterHubs.length < 4) {
+        if (MAIN_HUBS.some(h => v.includes(h.substring(0,3))) && !v.includes(stopName.substring(0,3))) {
+          const hub = MAIN_HUBS.find(h => v.includes(h.substring(0,3)));
+          if (hub && !afterHubs.includes(hub)) afterHubs.push(hub);
+        }
+      }
+    }
+
+    // 평일/토/공휴일 횟수 차이 여부
+    const hasDiff = !(countWeekday === countSat && countSat === countHol);
+    const remark = hasDiff
+      ? `평일${countWeekday} 토${countSat} 공${countHol}`
+      : '';
+
+    passingRoutes.push({
+      route, times, afterHubs, remark,
+      terminus: route['종점'],
+      firstPassMin: times[0]?.passMin ?? 9999
+    });
+  });
+
+  // 첫 통과 시각 순 정렬
+  passingRoutes.sort((a, b) => a.firstPassMin - b.firstPassMin);
+
+  if (passingRoutes.length === 0) {
+    document.getElementById('timetable-body').innerHTML =
+      `<div style="text-align:center;padding:40px 20px;color:#bbb;font-size:13px">
+        이 정류장을 지나는 버스가 없습니다
+      </div>`;
+    return;
+  }
+
+  // 렌더링
+  let html = `<div style="padding:10px 12px 6px;font-size:13px;font-weight:700;color:#222">
+    📍 ${displayName}
+    <span style="font-size:11px;font-weight:400;color:#888;margin-left:6px">${passingRoutes.length}개 노선</span>
+  </div>`;
+
+  // 헤더
+  html += `<div style="display:grid;grid-template-columns:52px 52px 1fr 72px auto;gap:0;background:#f8f8f8;border-top:.5px solid #e0e0e0;border-bottom:.5px solid #e0e0e0;padding:6px 12px;font-size:10px;font-weight:700;color:#888">
+    <div>시간</div>
+    <div>노선</div>
+    <div>주요 경유지</div>
+    <div>종점</div>
+    <div>비고</div>
+  </div>`;
+
+  passingRoutes.forEach(({ route, times, afterHubs, remark, terminus }) => {
+    const color = getZoneColor(route);
+    const busNum = getBusDisplayNum(route);
+    const viaStr = afterHubs.join(' → ');
+
+    times.forEach((t, i) => {
+      const isNext = !t.isPast && i === times.findIndex(x => !x.isPast);
+      const rowBg = isNext ? '#FFF8E1' : t.isPast ? '#fafafa' : '#fff';
+      const timeColor = t.isPast ? '#ccc' : isNext ? '#E24B4A' : '#185FA5';
+      const textColor = t.isPast ? '#ccc' : '#444';
+
+      html += `<div style="display:grid;grid-template-columns:52px 52px 1fr 72px auto;gap:0;background:${rowBg};border-bottom:.5px solid #f0f0f0;padding:7px 12px;align-items:center">
+        <div style="font-size:13px;font-weight:700;color:${timeColor};${t.isPast?'text-decoration:line-through':''}">${t.pass}</div>
+        <div><span style="background:${color};color:#fff;border-radius:5px;padding:2px 5px;font-size:10px;font-weight:700">${busNum}</span></div>
+        <div style="font-size:11px;color:${textColor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${viaStr}</div>
+        <div style="font-size:11px;color:${t.isPast?'#ccc':'#333'};font-weight:${isNext?'700':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${terminus}</div>
+        <div style="font-size:9px;color:#aaa;text-align:right;white-space:nowrap">${i===0&&remark?remark:''}</div>
+      </div>`;
+    });
+  });
+
+  document.getElementById('timetable-body').innerHTML = html;
+}
+
 // ==================== 즐겨찾기 ====================
 function saveSearchHistory(from, to) {
   const key = `${from}→${to}`;
