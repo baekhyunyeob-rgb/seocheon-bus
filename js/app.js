@@ -2460,6 +2460,8 @@ function closeHubDetail() {
   if (hint) hint.style.display = 'block';
   detail.style.display = 'none';
   detail.innerHTML = '';
+  // history 스택에서 hubDetail 항목 제거
+  history.replaceState({ screen: 'transport' }, '', '');
 }
 
 // ==================== 정류장 시간표 ====================
