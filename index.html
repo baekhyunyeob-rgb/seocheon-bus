@@ -6,9 +6,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="서천버스">
+<meta name="apple-mobile-web-app-title" content="대중교통">
 <meta name="theme-color" content="#1D9E75">
-<title>슬기로운 서천생활</title>
+<title>슬기로운 대중교통 생활</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚌</text></svg>">
 <link rel="stylesheet" href="css/style.css">
@@ -139,13 +139,19 @@
       <button class="back-btn" onclick="routesBack()">‹</button>
       <div>
         <div class="page-title">서천지역 버스 노선도</div>
-        <div class="page-sub">권역 선택 → 노선 선택 → 시간표</div>
+        <div class="page-sub" id="routes-sub">권역 선택 → 노선 선택 → 시간표</div>
       </div>
     </div>
     <div class="zone-tabs" id="zone-tabs"></div>
-    <div id="map-routes" class="map-container" style="height:280px"></div>
+
+    <!-- 상단: 지도 (자유 조작) -->
+    <div id="map-routes" class="map-container" style="height:calc(55vh - 100px);min-height:180px"></div>
     <div class="legend-bar" id="legend-bar"></div>
-    <div class="route-list" id="route-list"></div>
+
+    <!-- 하단: 노선 목록 or 선택 노선 상세 -->
+    <div id="routes-bottom" style="flex:1;overflow-y:auto;background:#fff;border-top:.5px solid #eee">
+      <div class="route-list" id="route-list"></div>
+    </div>
   </div>
 
   <!-- ==================== 고속·기차 화면 ==================== -->

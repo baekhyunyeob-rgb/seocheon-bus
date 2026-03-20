@@ -95,8 +95,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 폰 뒤로가기 처리
   window.addEventListener('popstate', (e) => {
     const screen = e.state?.screen || 'home';
+    const hubDetail = e.state?.hubDetail;
+
+    // 허브 상세에서 뒤로가기 → 카드 목록으로
+    if (hubDetail) {
+      closeHubDetail();
+      return;
+    }
+
     if (screen === 'home') {
-      // 홈이면 그냥 앱 종료 허용 (브라우저 기본 동작)
       if (currentScreen !== 'home') {
         showScreenNoHistory('home');
         history.replaceState({ screen: 'home' }, '', '');
@@ -2140,7 +2147,7 @@ function showRouteTimetable(routeNum, idx) {
     : ROUTES.find(r => r['번호'] === routeNum);
   if (!route) return;
 
-  // 지도에 노선 표시 (폴리라인 포함)
+  // 지도에 노선 표시
   if (mapRoutes) showRouteOnMap(route);
 
   const now = new Date();
@@ -2175,35 +2182,42 @@ function showRouteTimetable(routeNum, idx) {
     }).join('');
   }
 
-  // 기존 팝업 제거
-  document.getElementById('route-tt-panel')?.remove();
-  document.getElementById('route-tt-overlay')?.remove();
-
   const color = getZoneColor(route);
-  const panel = document.createElement('div');
-  panel.id = 'route-tt-panel';
-  panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,0.15);z-index:999;padding:10px 14px 12px;max-height:42vh;overflow-y:auto';
-  panel.innerHTML = `
-    <div style="width:32px;height:3px;background:#e0e0e0;border-radius:2px;margin:0 auto 10px"></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <div style="display:flex;align-items:center;gap:8px">
+  const bottom = document.getElementById('routes-bottom');
+  if (!bottom) return;
+
+  // 하단 패널에 직접 표시 (팝업 없음 → 지도 조작 자유)
+  bottom.innerHTML = `
+    <div style="padding:10px 14px 6px;display:flex;justify-content:space-between;align-items:center;border-bottom:.5px solid #f0f0f0">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="background:${color};color:#fff;border-radius:6px;padding:2px 10px;font-weight:700;font-size:14px">${getBusDisplayNum(route)}</span>
         <span style="font-size:12px;color:#555">${route['기점']} → ${route['종점']} · ${route['거리']}km</span>
       </div>
-      <button onclick="document.getElementById('route-tt-panel').remove();document.getElementById('route-tt-overlay').remove()" style="background:none;border:none;font-size:18px;color:#999;cursor:pointer;padding:0">✕</button>
+      <button onclick="closeRouteDetail()" style="background:none;border:none;font-size:16px;color:#aaa;cursor:pointer;padding:2px 4px">✕</button>
     </div>
-    <div style="font-size:11px;color:#aaa;margin-bottom:8px">경유: ${route['경유']}</div>
-    <div style="font-size:11px;color:#888;margin-bottom:6px">${dayType==='weekday'?'평일':dayType==='sat'?'토요일':'공휴일'} ${count}회 운행 ※ 추정</div>
-    <div style="display:flex;flex-wrap:wrap;gap:4px">${timesHtml}</div>
+    <div style="padding:6px 14px 4px;font-size:11px;color:#aaa">경유: ${route['경유']}</div>
+    <div style="padding:2px 14px 6px;font-size:11px;color:#888">${dayType==='weekday'?'평일':dayType==='sat'?'토요일':'공휴일'} ${count}회 운행 ※ 추정</div>
+    <div style="padding:4px 14px 10px;display:flex;flex-wrap:wrap;gap:4px">${timesHtml}</div>
   `;
 
-  const overlay = document.createElement('div');
-  overlay.id = 'route-tt-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.2);z-index:998';
-  overlay.onclick = () => { panel.remove(); overlay.remove(); };
+  // 서브타이틀 업데이트
+  const sub = document.getElementById('routes-sub');
+  if (sub) sub.textContent = `${getBusDisplayNum(route)} · ${route['기점']} → ${route['종점']}`;
+}
 
-  document.body.appendChild(overlay);
-  document.body.appendChild(panel);
+function closeRouteDetail() {
+  const bottom = document.getElementById('routes-bottom');
+  if (bottom) {
+    bottom.innerHTML = `<div class="route-list" id="route-list"></div>`;
+    renderRouteList(selectedZone);
+  }
+  const sub = document.getElementById('routes-sub');
+  if (sub) sub.textContent = '권역 선택 → 노선 선택 → 시간표';
+  // 지도 초기화
+  if (routePolyline) { routePolyline.setMap(null); routePolyline = null; }
+  routeMarkers.forEach(m => m.setMap(null));
+  routeMarkers = [];
+  if (mapRoutes) mapRoutes.setLevel(10);
 }
 
 function initRoutesMap() {
@@ -2253,24 +2267,23 @@ function showRouteOnMap(route) {
     routeMarkers.push(dot);
   });
 
-  // 기점/종점 마커
-  const addMarker = (lat, lng, label) => {
+  // 기점/종점 마커 — 간결하게 작은 원으로
+  const addMarker = (lat, lng, isStart) => {
+    const c = isStart ? '#185FA5' : '#E24B4A';
     const overlay = new kakao.maps.CustomOverlay({
       position: new kakao.maps.LatLng(lat, lng),
       content: `<div style="display:flex;flex-direction:column;align-items:center">
-        <div style="background:${color};color:#fff;border-radius:8px;padding:2px 7px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,.2)">${label}</div>
-        <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid ${color};margin-top:-1px"></div>
-        <div style="width:7px;height:7px;background:${color};border:2px solid #fff;border-radius:50%"></div>
+        <div style="width:10px;height:10px;background:${c};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>
       </div>`,
-      yAnchor: 1.1, zIndex: 5
+      yAnchor: 0.5, zIndex: 5
     });
     overlay.setMap(mapRoutes);
     routeMarkers.push(overlay);
   };
 
   if (allCoords.length > 0) {
-    addMarker(allCoords[0].lat, allCoords[0].lng, route['기점']);
-    addMarker(allCoords[allCoords.length-1].lat, allCoords[allCoords.length-1].lng, route['종점']);
+    addMarker(allCoords[0].lat, allCoords[0].lng, true);
+    addMarker(allCoords[allCoords.length-1].lat, allCoords[allCoords.length-1].lng, false);
   }
 
   // 지도 범위 조정
@@ -2343,6 +2356,8 @@ function showHubDetail(idx) {
   grid.style.display = 'none';
   if (hint) hint.style.display = 'none';
   detail.style.display = 'block';
+  // 폰 뒤로가기 시 카드 목록으로 돌아오도록 history 추가
+  history.pushState({ screen: 'transport', hubDetail: true }, '', '');
 
   let html = `<div class="hub-detail-back" onclick="closeHubDetail()">
     <span class="hub-detail-back-btn">‹</span>
@@ -2433,7 +2448,7 @@ function transportBack() {
   if (detail && detail.style.display !== 'none') {
     closeHubDetail();
   } else {
-    showScreen('home');
+    showScreen('transport');
   }
 }
 
@@ -2722,9 +2737,25 @@ function quickSearch(from, to) {
   document.getElementById('text-from').classList.remove('loc-placeholder');
   document.getElementById('text-to').textContent = to;
   document.getElementById('text-to').classList.remove('loc-placeholder');
-  searchState.from = { name: from, lat: myLocation.lat, lng: myLocation.lng };
-  const toStop = STOPS.find(s => s.name.includes(to.substring(0,3)));
-  searchState.to = toStop || { name: to, lat: myLocation.lat, lng: myLocation.lng };
+
+  // 출발지 좌표: GPS현위치 or stops에서 검색
+  if (from === '현위치') {
+    searchState.from = { name: '현위치', lat: myLocation.lat, lng: myLocation.lng, isGps: true };
+  } else {
+    const fromStop = STOPS.find(s => s.name === from) ||
+                     STOPS.find(s => s.name.includes(from.substring(0,4)));
+    searchState.from = fromStop
+      ? { name: from, lat: fromStop.lat, lng: fromStop.lng }
+      : { name: from, lat: myLocation.lat, lng: myLocation.lng };
+  }
+
+  // 도착지 좌표
+  const toStop = STOPS.find(s => s.name === to) ||
+                 STOPS.find(s => s.name.includes(to.substring(0,3)));
+  searchState.to = toStop
+    ? { name: to, lat: toStop.lat, lng: toStop.lng }
+    : { name: to, lat: myLocation.lat, lng: myLocation.lng };
+
   showScreen('home');
   setTimeout(() => searchRoute(), 300);
 }
