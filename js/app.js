@@ -1284,25 +1284,73 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
   const returnRoute = findReturnRoute(dayType, retBaseMin);
   if (returnRoute && !returnRoute.notFound) {
     if (returnRoute.isTransfer) {
-      // 환승 복귀 — 각 구간 다음 버스 시각 계산
+      // 환승 복귀 — 정상 검색 환승 카드와 동일 형식
       const zoneColor1 = getZoneColor(returnRoute.route);
       const zoneColor2 = getZoneColor(returnRoute.route2);
-      const retNext1 = getNextBusAfter(returnRoute.route, retBaseMin, dayType);
-      const retNext2 = retNext1 ? getNextBusAfter(returnRoute.route2, retBaseMin, dayType) : null;
-      const timeInfo = retNext1
-        ? `<span style="color:#E24B4A;font-weight:700">${retNext1}</span><span style="color:#555;font-size:11px"> 출발</span>`
-        : `<span style="color:#aaa;font-size:11px">오늘 운행 종료</span>`;
-      html += `<div style="margin:0 10px 8px;background:#fff;border:.5px solid #ddd;border-radius:10px;padding:10px 12px">
-        <div style="font-size:10px;color:#aaa;margin-bottom:6px">${bestArriveTime} 도착 후 기준 (${retBaseStr} 이후)</div>
-        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:6px">
-          <span class="bus-pill" style="background:${zoneColor1}">${getBusDisplayNum(returnRoute.route)}</span>
-          <span style="color:#888;font-size:12px">→ ${returnRoute.transferHub}에서</span>
-          <span class="bus-pill" style="background:${zoneColor2}">${getBusDisplayNum(returnRoute.route2)}</span>
-          <span style="color:#888;font-size:12px">환승</span>
-        </div>
-        <div style="font-size:13px">${timeInfo}</div>
-        <div style="font-size:11px;color:#555;margin-top:3px">${toName} → ${fromName}</div>
-      </div>`;
+      const busNum1 = getBusDisplayNum(returnRoute.route);
+      const busNum2 = getBusDisplayNum(returnRoute.route2);
+
+      // 1구간 기점출발 시각
+      const retDep = getNextBusAfter(returnRoute.route, retBaseMin, dayType);
+      if (retDep) {
+        // 1구간 기점→허브 소요시간 추정
+        const r1coords = getRouteCoords(returnRoute.route);
+        const hubStop = STOPS.find(s => s.name.includes(returnRoute.transferHub.substring(0,3)));
+        const r1HubIdx = hubStop ? findCoordIdx(r1coords, hubStop.lat, hubStop.lng) : -1;
+        const retFromLat = searchState.to?.lat, retFromLng = searchState.to?.lng;
+        const retToLat   = searchState.from?.isGps ? myLocation.lat : searchState.from?.lat;
+        const retToLng   = searchState.from?.isGps ? myLocation.lng : searchState.from?.lng;
+        const retFromStop = STOPS.find(s => coordDist(s.lat,s.lng,retFromLat,retFromLng) < 100);
+        const r1FromIdx = retFromStop ? findCoordIdx(r1coords, retFromStop.lat, retFromStop.lng) : 0;
+        const r1total = routeTotalMin(returnRoute.route);
+        const r1len = Math.max(r1coords.length-1,1);
+        // 탑승지 통과 시각 (leg0: 기점→탑승지)
+        const leg0m = r1FromIdx > 0 ? Math.round(r1total * r1FromIdx / r1len) : 0;
+        const [dh,dm] = retDep.split(':').map(Number);
+        const boardMin = dh*60+dm + leg0m;
+        // 환승지 도착 시각 (leg1: 탑승지→허브)
+        const leg1m = (r1HubIdx > r1FromIdx)
+          ? Math.round(r1total * (r1HubIdx - r1FromIdx) / r1len) : 0;
+        const hubArrMin = boardMin + leg1m;
+        const hubArrStr = `${String(Math.floor(hubArrMin/60)%24).padStart(2,'0')}:${String(hubArrMin%60).padStart(2,'0')}`;
+
+        // 2구간: 허브 이후 첫 버스 + 도착 시각
+        const retDep2 = getNextBusAfter(returnRoute.route2, hubArrMin + 5, dayType);
+        let arrStr = '';
+        if (retDep2) {
+          const r2coords = getRouteCoords(returnRoute.route2);
+          const r2HubIdx = hubStop ? findCoordIdx(r2coords, hubStop.lat, hubStop.lng) : 0;
+          const retToStop = STOPS.find(s => coordDist(s.lat,s.lng,retToLat,retToLng) < 100);
+          const r2ToIdx = retToStop ? findCoordIdx(r2coords, retToStop.lat, retToStop.lng) : r2coords.length-1;
+          const leg2m = (r2ToIdx > r2HubIdx)
+            ? Math.round(routeTotalMin(returnRoute.route2) * (r2ToIdx - r2HubIdx) / Math.max(r2coords.length-1,1)) : 0;
+          const [d2h,d2m] = retDep2.split(':').map(Number);
+          const arrMin = d2h*60+d2m + leg2m;
+          arrStr = `${String(Math.floor(arrMin/60)%24).padStart(2,'0')}:${String(arrMin%60).padStart(2,'0')}`;
+        }
+
+        const boardStr = `${String(Math.floor(boardMin/60)%24).padStart(2,'0')}:${String(boardMin%60).padStart(2,'0')}`;
+
+        html += `<div style="margin:0 10px 8px;background:#fff;border:.5px solid #ddd;border-radius:10px;padding:10px 12px">
+          <div style="font-size:10px;color:#aaa;margin-bottom:6px">${bestArriveTime} 도착 후 기준 (${retBaseStr} 이후)</div>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:6px">
+            <span class="bus-pill" style="background:${zoneColor1}">${busNum1}</span>
+            <span style="color:#888;font-size:12px">→ ${returnRoute.transferHub}에서</span>
+            <span class="bus-pill" style="background:${zoneColor2}">${busNum2}</span>
+            <span style="color:#888;font-size:12px">환승</span>
+          </div>
+          <div style="font-size:13px;color:#222">
+            <span style="color:#185FA5;font-weight:700">${boardStr}</span>
+            <span style="color:#555;font-size:11px"> 출발</span>
+            <span style="color:#888;font-size:12px"> → ${retDep2 || '?'} 환승 →</span>
+            ${arrStr ? `<span style="color:#E24B4A;font-weight:700"> ${arrStr}</span><span style="color:#555;font-size:11px"> 도착</span>` : '<span style="color:#aaa;font-size:11px"> 운행 종료</span>'}
+          </div>
+        </div>`;
+      } else {
+        html += `<div style="margin:0 10px 8px;background:#f8f8f8;border-radius:10px;padding:12px;font-size:13px;color:#888;text-align:center">
+          오늘 해당 구간 복귀 노선을 찾을 수 없습니다
+        </div>`;
+      }
     } else {
       // 직행 복귀
       const retTimetableHtml = buildTimetableHtmlAfter(returnRoute.route, retBaseMin, dayType, '#E24B4A');
