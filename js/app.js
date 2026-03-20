@@ -2418,17 +2418,22 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
 
-  // 이 정류장을 지나는 노선 탐색 (좌표 기반, 300m)
   const stopCoords = getNearbyCoords(lat, lng, 300);
-  const passingRoutes = [];
+  const MAIN_HUBS = ['서천터미널','한산공용터미널','장항터미널','서천역','판교','기산','문산','화양','비인','마서','종천','장항읍내'];
+
+  // 모든 통과 시각을 단일 배열로 수집 (시간 기준 정렬)
+  const allRows = [];
+  let totalCount = 0;
 
   ROUTES.forEach(route => {
     const coords = getRouteCoords(route);
     if (!coords.length) return;
+
+    // 순환선: 동일 정류장을 2번 통과할 수 있음 → 첫 번째 통과만 사용
+    const isCircular = route['기점'] === route['종점'];
     const idx = findCoordIdxMulti(coords, stopCoords, 300);
     if (idx === -1) return;
 
-    // 이 정류장에서의 통과 시각 계산
     const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
     const countWeekday = route['평일횟수'] || 0;
     const countSat     = route['토요일횟수'] || 0;
@@ -2436,61 +2441,60 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     const count = route[countKey] || 0;
     if (!count || !route['첫차'] || !route['막차']) return;
 
-    // 기점출발 시간표 생성
     const [fh,fm] = route['첫차'].split(':').map(Number);
     const [lh,lm] = route['막차'].split(':').map(Number);
     const fMin=fh*60+fm, lMin=lh*60+lm;
     const interval = count > 1 ? Math.round((lMin-fMin)/(count-1)) : 0;
 
-    // 이 정류장 통과 시각 = 기점출발 + leg0
     const totalMin = routeTotalMin(route);
     const len = Math.max(coords.length-1, 1);
     const leg0 = Math.round(totalMin * idx / len);
 
-    const times = [];
-    for (let i = 0; i < count; i++) {
-      const depMin = fMin + interval*i;
-      const passMin = depMin + leg0;
-      times.push({
-        dep: `${String(Math.floor(depMin/60)).padStart(2,'0')}:${String(depMin%60).padStart(2,'0')}`,
-        pass: `${String(Math.floor(passMin/60)%24).padStart(2,'0')}:${String(passMin%60).padStart(2,'0')}`,
-        passMin,
-        isPast: passMin < nowMin
-      });
-    }
-
-    // 경유지에서 주요 허브 추출 (이 정류장 이후 구간, 최대 4개)
+    // 주요 경유지 추출 (이 정류장 이후, 종점과 같은 허브는 제외)
     const viaList = [route['기점'], ...route['경유'].split('→').map(s=>s.trim()).filter(Boolean), route['종점']];
-    const MAIN_HUBS = ['서천터미널','한산공용터미널','장항터미널','서천역','판교','기산','문산','화양','비인','마서','종천','장항읍내'];
+    const terminus = route['종점'];
     const afterHubs = [];
     let passedStop = false;
     for (const v of viaList) {
       if (v.includes(stopName.substring(0,3))) passedStop = true;
       if (passedStop && afterHubs.length < 4) {
-        if (MAIN_HUBS.some(h => v.includes(h.substring(0,3))) && !v.includes(stopName.substring(0,3))) {
-          const hub = MAIN_HUBS.find(h => v.includes(h.substring(0,3)));
-          if (hub && !afterHubs.includes(hub)) afterHubs.push(hub);
+        const hub = MAIN_HUBS.find(h => v.includes(h.substring(0,3)));
+        if (hub && !afterHubs.includes(hub) && !terminus.includes(hub.substring(0,3))) {
+          afterHubs.push(hub);
         }
       }
     }
+    const viaStr = afterHubs.join(' → ');
 
-    // 평일/토/공휴일 횟수 차이 여부
+    // 비고 구성
     const hasDiff = !(countWeekday === countSat && countSat === countHol);
-    const remark = hasDiff
-      ? `평일${countWeekday} 토${countSat} 공${countHol}`
-      : '';
+    const remarkParts = [];
+    if (isCircular) remarkParts.push('순환');
+    if (hasDiff) remarkParts.push(`평${countWeekday}/토${countSat}/공${countHol}`);
+    const remark = remarkParts.join(' ');
 
-    passingRoutes.push({
-      route, times, afterHubs, remark,
-      terminus: route['종점'],
-      firstPassMin: times[0]?.passMin ?? 9999
-    });
+    const color = getZoneColor(route);
+    const busNum = getBusDisplayNum(route);
+
+    for (let i = 0; i < count; i++) {
+      const depMin = fMin + interval*i;
+      const passMin = depMin + leg0;
+      const passStr = `${String(Math.floor(passMin/60)%24).padStart(2,'0')}:${String(passMin%60).padStart(2,'0')}`;
+      allRows.push({
+        passMin, passStr,
+        isPast: passMin < nowMin,
+        color, busNum, viaStr, terminus, remark,
+        // 순환선 비고는 첫 행에만 표시
+        showRemark: i === 0
+      });
+      totalCount++;
+    }
   });
 
-  // 첫 통과 시각 순 정렬
-  passingRoutes.sort((a, b) => a.firstPassMin - b.firstPassMin);
+  // 통과 시각 기준 정렬
+  allRows.sort((a, b) => a.passMin - b.passMin);
 
-  if (passingRoutes.length === 0) {
+  if (allRows.length === 0) {
     document.getElementById('timetable-body').innerHTML =
       `<div style="text-align:center;padding:40px 20px;color:#bbb;font-size:13px">
         이 정류장을 지나는 버스가 없습니다
@@ -2498,10 +2502,15 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     return;
   }
 
-  // 렌더링
+  // 다음 버스 인덱스
+  const nextIdx = allRows.findIndex(r => !r.isPast);
+
+  // 노선 수 계산 (중복 없이)
+  const routeCount = new Set(allRows.map(r => r.busNum)).size;
+
   let html = `<div style="padding:10px 12px 6px;font-size:13px;font-weight:700;color:#222">
     📍 ${displayName}
-    <span style="font-size:11px;font-weight:400;color:#888;margin-left:6px">${passingRoutes.length}개 노선</span>
+    <span style="font-size:11px;font-weight:400;color:#888;margin-left:6px">총 ${routeCount}개 노선, ${totalCount}회</span>
   </div>`;
 
   // 헤더
@@ -2513,25 +2522,20 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     <div>비고</div>
   </div>`;
 
-  passingRoutes.forEach(({ route, times, afterHubs, remark, terminus }) => {
-    const color = getZoneColor(route);
-    const busNum = getBusDisplayNum(route);
-    const viaStr = afterHubs.join(' → ');
+  allRows.forEach((r, i) => {
+    const isNext = i === nextIdx;
+    // 노란 배경 = 다음 버스, 흰 배경 = 앞으로 올 버스, 회색 배경 = 지난 버스
+    const rowBg    = isNext ? '#FFF8E1' : r.isPast ? '#fafafa' : '#fff';
+    const timeColor = r.isPast ? '#ccc' : isNext ? '#E24B4A' : '#185FA5';
+    const textColor = r.isPast ? '#ccc' : '#444';
 
-    times.forEach((t, i) => {
-      const isNext = !t.isPast && i === times.findIndex(x => !x.isPast);
-      const rowBg = isNext ? '#FFF8E1' : t.isPast ? '#fafafa' : '#fff';
-      const timeColor = t.isPast ? '#ccc' : isNext ? '#E24B4A' : '#185FA5';
-      const textColor = t.isPast ? '#ccc' : '#444';
-
-      html += `<div style="display:grid;grid-template-columns:52px 52px 1fr 72px auto;gap:0;background:${rowBg};border-bottom:.5px solid #f0f0f0;padding:7px 12px;align-items:center">
-        <div style="font-size:13px;font-weight:700;color:${timeColor};${t.isPast?'text-decoration:line-through':''}">${t.pass}</div>
-        <div><span style="background:${color};color:#fff;border-radius:5px;padding:2px 5px;font-size:10px;font-weight:700">${busNum}</span></div>
-        <div style="font-size:11px;color:${textColor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${viaStr}</div>
-        <div style="font-size:11px;color:${t.isPast?'#ccc':'#333'};font-weight:${isNext?'700':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${terminus}</div>
-        <div style="font-size:9px;color:#aaa;text-align:right;white-space:nowrap">${i===0&&remark?remark:''}</div>
-      </div>`;
-    });
+    html += `<div style="display:grid;grid-template-columns:52px 52px 1fr 72px auto;gap:0;background:${rowBg};border-bottom:.5px solid #f0f0f0;padding:7px 12px;align-items:center">
+      <div style="font-size:13px;font-weight:700;color:${timeColor};${r.isPast?'text-decoration:line-through':''}">${r.passStr}</div>
+      <div><span style="background:${r.color};color:#fff;border-radius:5px;padding:2px 5px;font-size:10px;font-weight:700">${r.busNum}</span></div>
+      <div style="font-size:11px;color:${textColor};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.viaStr}</div>
+      <div style="font-size:11px;color:${r.isPast?'#ccc':'#333'};font-weight:${isNext?'700':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.terminus}</div>
+      <div style="font-size:9px;color:#aaa;text-align:right;white-space:nowrap">${r.remark}</div>
+    </div>`;
   });
 
   document.getElementById('timetable-body').innerHTML = html;
