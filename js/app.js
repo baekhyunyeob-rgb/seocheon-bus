@@ -2140,7 +2140,7 @@ function showRouteTimetable(routeNum, idx) {
     : ROUTES.find(r => r['번호'] === routeNum);
   if (!route) return;
 
-  // 지도에 기점/종점 표시
+  // 지도에 노선 표시 (폴리라인 포함)
   if (mapRoutes) showRouteOnMap(route);
 
   const now = new Date();
@@ -2168,35 +2168,38 @@ function showRouteTimetable(routeNum, idx) {
       const tMin = th * 60 + tm;
       const passed = tMin < nowMin;
       const isNext = !passed && times.find(tt => { const [a,b]=tt.split(':').map(Number); return a*60+b>=nowMin; }) === t;
-      return `<span class="tt-chip ${isNext?'next-dep':''} ${passed?'passed':''}" style="font-size:13px;padding:6px 10px">
+      return `<span class="tt-chip ${isNext?'next-dep':''} ${passed?'passed':''}" style="font-size:12px;padding:4px 8px">
         <div class="tt-chip-time ${passed?'passed-time':''}">${t}</div>
         <div class="tt-chip-lbl">${isNext?'다음':''}${t===lastStr?'막차':''}</div>
       </span>`;
     }).join('');
   }
 
+  // 기존 팝업 제거
+  document.getElementById('route-tt-panel')?.remove();
+  document.getElementById('route-tt-overlay')?.remove();
+
+  const color = getZoneColor(route);
   const panel = document.createElement('div');
   panel.id = 'route-tt-panel';
-  panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-radius:20px 20px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,0.15);z-index:999;padding:16px;max-height:70vh;overflow-y:auto';
+  panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,0.15);z-index:999;padding:10px 14px 12px;max-height:42vh;overflow-y:auto';
   panel.innerHTML = `
-    <div style="width:40px;height:4px;background:#e0e0e0;border-radius:2px;margin:0 auto 16px"></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div>
-        <span style="background:#1D9E75;color:#fff;border-radius:6px;padding:3px 10px;font-weight:600;font-size:15px">${getBusDisplayNum(route)}</span>
-        <span style="margin-left:8px;font-size:14px;color:#333">${route['노선군']}</span>
+    <div style="width:32px;height:3px;background:#e0e0e0;border-radius:2px;margin:0 auto 10px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="background:${color};color:#fff;border-radius:6px;padding:2px 10px;font-weight:700;font-size:14px">${getBusDisplayNum(route)}</span>
+        <span style="font-size:12px;color:#555">${route['기점']} → ${route['종점']} · ${route['거리']}km</span>
       </div>
-      <button onclick="document.getElementById('route-tt-panel').remove();document.getElementById('route-tt-overlay').remove()" style="background:none;border:none;font-size:20px;color:#999;cursor:pointer">✕</button>
+      <button onclick="document.getElementById('route-tt-panel').remove();document.getElementById('route-tt-overlay').remove()" style="background:none;border:none;font-size:18px;color:#999;cursor:pointer;padding:0">✕</button>
     </div>
-    <div style="font-size:13px;color:#666;margin-bottom:8px">${route['기점']} → ${route['종점']} · ${route['거리']}km</div>
-    <div style="font-size:12px;color:#aaa;margin-bottom:12px">경유: ${route['경유']}</div>
-    <div style="font-size:12px;color:#888;margin-bottom:8px">오늘 시간표 (${dayType==='weekday'?'평일':dayType==='sat'?'토요일':'공휴일'} ${count}회) ※ 추정</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px">${timesHtml}</div>
-    <div style="height:20px"></div>
+    <div style="font-size:11px;color:#aaa;margin-bottom:8px">경유: ${route['경유']}</div>
+    <div style="font-size:11px;color:#888;margin-bottom:6px">${dayType==='weekday'?'평일':dayType==='sat'?'토요일':'공휴일'} ${count}회 운행 ※ 추정</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">${timesHtml}</div>
   `;
 
   const overlay = document.createElement('div');
   overlay.id = 'route-tt-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:998';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.2);z-index:998';
   overlay.onclick = () => { panel.remove(); overlay.remove(); };
 
   document.body.appendChild(overlay);
@@ -2213,34 +2216,68 @@ function initRoutesMap() {
 }
 
 let routeMarkers = [];
+let routePolyline = null;
+
 function showRouteOnMap(route) {
   if (!mapRoutes) return;
   routeMarkers.forEach(m => m.setMap(null));
   routeMarkers = [];
+  if (routePolyline) { routePolyline.setMap(null); routePolyline = null; }
 
-  // 기점·종점 stops에서 좌표 찾기
-  const fromStop = STOPS.find(s => s.name.includes(route['기점'].substring(0,4)));
-  const toStop = STOPS.find(s => s.name.includes(route['종점'].substring(0,4)));
+  const color = getZoneColor(route);
 
-  if (fromStop) {
-    const marker = new kakao.maps.Marker({
-      position: new kakao.maps.LatLng(fromStop.lat, fromStop.lng),
-      map: mapRoutes
+  // ROUTE_COORDS에서 전체 경유지 좌표 가져오기
+  const allCoords = (getRouteCoords(route) || []).filter(c => c.lat);
+
+  // 폴리라인 그리기
+  if (allCoords.length >= 2) {
+    routePolyline = new kakao.maps.Polyline({
+      map: mapRoutes,
+      path: allCoords.map(c => new kakao.maps.LatLng(c.lat, c.lng)),
+      strokeWeight: 4,
+      strokeColor: color,
+      strokeOpacity: 0.85,
+      strokeStyle: 'solid'
     });
-    routeMarkers.push(marker);
   }
-  if (toStop) {
-    const marker = new kakao.maps.Marker({
-      position: new kakao.maps.LatLng(toStop.lat, toStop.lng),
-      map: mapRoutes
+
+  // 중간 경유지 작은 점
+  allCoords.forEach((c, i) => {
+    if (i === 0 || i === allCoords.length - 1) return;
+    const dot = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(c.lat, c.lng),
+      content: `<div style="width:5px;height:5px;background:${color};border:1.5px solid #fff;border-radius:50%;opacity:0.7"></div>`,
+      yAnchor: 0.5, zIndex: 2
     });
-    routeMarkers.push(marker);
+    dot.setMap(mapRoutes);
+    routeMarkers.push(dot);
+  });
+
+  // 기점/종점 마커
+  const addMarker = (lat, lng, label) => {
+    const overlay = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(lat, lng),
+      content: `<div style="display:flex;flex-direction:column;align-items:center">
+        <div style="background:${color};color:#fff;border-radius:8px;padding:2px 7px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,.2)">${label}</div>
+        <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid ${color};margin-top:-1px"></div>
+        <div style="width:7px;height:7px;background:${color};border:2px solid #fff;border-radius:50%"></div>
+      </div>`,
+      yAnchor: 1.1, zIndex: 5
+    });
+    overlay.setMap(mapRoutes);
+    routeMarkers.push(overlay);
+  };
+
+  if (allCoords.length > 0) {
+    addMarker(allCoords[0].lat, allCoords[0].lng, route['기점']);
+    addMarker(allCoords[allCoords.length-1].lat, allCoords[allCoords.length-1].lng, route['종점']);
   }
-  if (fromStop && toStop) {
+
+  // 지도 범위 조정
+  if (allCoords.length > 0) {
     const bounds = new kakao.maps.LatLngBounds();
-    bounds.extend(new kakao.maps.LatLng(fromStop.lat, fromStop.lng));
-    bounds.extend(new kakao.maps.LatLng(toStop.lat, toStop.lng));
-    mapRoutes.setBounds(bounds);
+    allCoords.forEach(c => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
+    mapRoutes.setBounds(bounds, 40);
   }
 }
 
