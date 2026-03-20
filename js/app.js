@@ -151,14 +151,20 @@ function buildRouteCoords() {
     for (const key of keys) {
       const candidates = stopIndex.get(key) || [];
       for (const s of candidates) {
-        // 이름 유사도 점수 (공통 문자 비율)
         const score = key.length / Math.max(clean.length, s.name.length);
-        if (score > bestScore) {
-          bestScore = score;
-          best = s;
-        }
+        if (score > bestScore) { bestScore = score; best = s; }
       }
     }
+
+    // 키워드 매칭 보완: 정류장 이름에 경유지명이 포함되거나 경유지명이 정류장명에 포함
+    // 예: 경유지 "연봉" → "연봉입구.갈숲마을" 매칭
+    STOPS.forEach(s => {
+      if (s.name.includes(clean) && clean.length >= 2) {
+        // 정류장명에 경유지명이 포함: 점수 높게
+        const score = clean.length / s.name.length + 0.2;
+        if (score > bestScore) { bestScore = score; best = s; }
+      }
+    });
     return best;
   }
 
@@ -1268,20 +1274,40 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
   }
 
   // 복귀시에는
+  html += '<div class="result-section-label" style="margin-top:4px">복귀시에는</div>';
   const returnRoute = findReturnRoute(dayType);
-  if (returnRoute) {
-    const retTimetableHtml = buildTimetableHtml(returnRoute.route, null, dayType, '#E24B4A');
-    if (retTimetableHtml) {
-      html += '<div class="result-section-label" style="margin-top:4px">복귀시에는</div>';
-      let retHtml = retTimetableHtml
-        .replace('class="tt-fill"', 'class="tt-fill ret"')
-        .replace('background:#1D9E75', 'background:#E24B4A');
-      retHtml = retHtml.replace(
-        `${returnRoute.route['기점']} → ${returnRoute.route['종점']}`,
-        `${toName} → ${fromName}`
-      );
-      html += retHtml;
+  if (returnRoute && !returnRoute.notFound) {
+    if (returnRoute.isTransfer) {
+      // 환승 복귀
+      const zoneColor1 = getZoneColor(returnRoute.route);
+      const zoneColor2 = getZoneColor(returnRoute.route2);
+      html += `<div style="margin:0 10px 8px;background:#fff;border:.5px solid #ddd;border-radius:10px;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:6px">
+          <span class="bus-pill" style="background:${zoneColor1}">${getBusDisplayNum(returnRoute.route)}</span>
+          <span style="color:#888;font-size:12px">→ ${returnRoute.transferHub}에서</span>
+          <span class="bus-pill" style="background:${zoneColor2}">${getBusDisplayNum(returnRoute.route2)}</span>
+          <span style="color:#888;font-size:12px">환승</span>
+        </div>
+        <div style="font-size:12px;color:#555">${toName} → ${fromName}</div>
+      </div>`;
+    } else {
+      // 직행 복귀
+      const retTimetableHtml = buildTimetableHtml(returnRoute.route, null, dayType, '#E24B4A');
+      if (retTimetableHtml) {
+        let retHtml = retTimetableHtml
+          .replace('class="tt-fill"', 'class="tt-fill ret"')
+          .replace('background:#1D9E75', 'background:#E24B4A');
+        retHtml = retHtml.replace(
+          `${returnRoute.route['기점']} → ${returnRoute.route['종점']}`,
+          `${toName} → ${fromName}`
+        );
+        html += retHtml;
+      }
     }
+  } else {
+    html += `<div style="margin:0 10px 8px;background:#f8f8f8;border-radius:10px;padding:12px;font-size:13px;color:#888;text-align:center">
+      오늘 해당 구간 복귀 노선을 찾을 수 없습니다
+    </div>`;
   }
 
   body.innerHTML = html;
@@ -1546,7 +1572,6 @@ function buildTimetableHtml(route, nextBus, dayType, accentColor) {
 }
 
 function findReturnRoute(dayType) {
-  // 원래 검색의 출발지/도착지를 뒤집어서 탐색
   const retFromLat = searchState.to?.lat;
   const retFromLng = searchState.to?.lng;
   const retToLat   = searchState.from?.isGps ? myLocation.lat : searchState.from?.lat;
@@ -1554,35 +1579,79 @@ function findReturnRoute(dayType) {
 
   if (!retFromLat || !retToLat) return null;
 
-  const retFromCoords = getNearbyCoords(retFromLat, retFromLng);
-  const retToCoords   = getNearbyCoords(retToLat,   retToLng);
+  const retFromCoords = getNearbyCoords(retFromLat, retFromLng, 300);
+  const retToCoords   = getNearbyCoords(retToLat,   retToLng,   300);
+  const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
 
-  const now = new Date();
-  const candidates = [];
-
+  // ① 직행 탐색
+  const directCandidates = [];
   ROUTES.forEach(route => {
     const coords = getRouteCoords(route);
     if (!coords.length) return;
-
-    const fromIdx = findCoordIdxMulti(coords, retFromCoords, 300); // 복귀출발: 300m
-    const toIdx   = findCoordIdxMulti(coords, retToCoords,   300); // 복귀도착: 300m
+    const fromIdx = findCoordIdxMulti(coords, retFromCoords, 300);
+    const toIdx   = findCoordIdxMulti(coords, retToCoords,   300);
     if (fromIdx === -1 || toIdx === -1 || fromIdx >= toIdx) return;
-
-    const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
     if (!(route[countKey] > 0) || !route['첫차'] || !route['막차']) return;
-
-    candidates.push(route);
+    directCandidates.push(route);
   });
 
-  if (candidates.length === 0) return null;
+  if (directCandidates.length > 0) {
+    directCandidates.sort((a, b) => (b[countKey]||0) - (a[countKey]||0));
+    return { route: directCandidates[0], isTransfer: false };
+  }
 
-  // 가장 운행 횟수 많은 노선 우선
-  candidates.sort((a, b) => {
-    const key = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
-    return (b[key] || 0) - (a[key] || 0);
-  });
+  // ② 직행 없으면 환승 탐색
+  const HUBS_LIST = [
+    '서천터미널', '장항터미널', '한산공용터미널',
+    '서천역', '장항읍내', '판교', '기산', '문산',
+    '화양', '비인', '마산', '시초', '광암', '구동입구'
+  ];
 
-  return { route: candidates[0] };
+  const now = new Date();
+  const searchBaseMin = now.getHours() * 60 + now.getMinutes();
+
+  for (const hub of HUBS_LIST) {
+    const hubStop = STOPS.find(s => s.name.includes(hub.substring(0,3)));
+    if (!hubStop) continue;
+    const hubLat = hubStop.lat, hubLng = hubStop.lng;
+
+    // 허브 방향 체크
+    const dFromTo = coordDist(retFromLat, retFromLng, retToLat, retToLng);
+    const dHubTo  = coordDist(hubLat, hubLng, retToLat, retToLng);
+    if (dHubTo >= dFromTo) continue;
+
+    // 1구간: 복귀출발 → 허브
+    const leg1Routes = ROUTES.filter(r => {
+      const coords = getRouteCoords(r);
+      const hi = findCoordIdx(coords, hubLat, hubLng);
+      if (hi === -1) return false;
+      const fi = findCoordIdxMulti(coords, retFromCoords, 300);
+      return fi !== -1 && fi < hi && (r[countKey] > 0);
+    });
+
+    // 2구간: 허브 → 복귀도착
+    const leg2Routes = ROUTES.filter(r => {
+      const coords = getRouteCoords(r);
+      const hi = findCoordIdx(coords, hubLat, hubLng);
+      const ti = findCoordIdxMulti(coords, retToCoords, 300);
+      return hi !== -1 && ti !== -1 && hi < ti && (r[countKey] > 0);
+    });
+
+    if (!leg1Routes.length || !leg2Routes.length) continue;
+
+    // 가장 운행 많은 조합 반환
+    leg1Routes.sort((a,b) => (b[countKey]||0) - (a[countKey]||0));
+    leg2Routes.sort((a,b) => (b[countKey]||0) - (a[countKey]||0));
+
+    return {
+      route: leg1Routes[0],
+      route2: leg2Routes[0],
+      transferHub: hub,
+      isTransfer: true
+    };
+  }
+
+  return { notFound: true };
 }
 
 // ==================== 경로 상세 ====================
