@@ -95,21 +95,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 폰 뒤로가기 처리
   window.addEventListener('popstate', (e) => {
     const screen = e.state?.screen || 'home';
-    const hubDetail = e.state?.hubDetail;
-
-    // 허브 상세에서 뒤로가기 → 카드 목록으로 (history는 이미 pop됨)
-    if (hubDetail) {
-      // hub-detail 닫고 카드 목록 복원 (history 조작 없이 화면만)
-      const grid = document.getElementById('hub-grid');
-      const hint = grid?.nextElementSibling;
-      const detail = document.getElementById('hub-detail');
-      if (grid) grid.style.display = 'grid';
-      if (hint) hint.style.display = 'block';
-      if (detail) { detail.style.display = 'none'; detail.innerHTML = ''; }
-      // transport 화면이 현재 화면이 아니면 표시
-      if (currentScreen !== 'transport') showScreenNoHistory('transport');
-      return;
-    }
 
     if (screen === 'home') {
       if (currentScreen !== 'home') {
@@ -117,6 +102,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         history.replaceState({ screen: 'home' }, '', '');
       }
     } else {
+      // transport로 돌아올 때 hub-detail이 열려있으면 먼저 닫기
+      if (screen === 'transport') {
+        const detail = document.getElementById('hub-detail');
+        if (detail && detail.style.display !== 'none') {
+          closeHubDetail();
+          // 아직 transport 화면에 있어야 하므로 history에 다시 push
+          history.pushState({ screen: 'transport' }, '', '');
+          return;
+        }
+      }
       showScreenNoHistory(screen);
     }
   });
@@ -2364,8 +2359,8 @@ function showHubDetail(idx) {
   grid.style.display = 'none';
   if (hint) hint.style.display = 'none';
   detail.style.display = 'block';
-  // 폰 뒤로가기 시 카드 목록으로 돌아오도록 history 추가
-  history.pushState({ screen: 'transport', hubDetail: true }, '', '');
+  // hubDetail은 별도 history 항목 없이 transport 상태로 관리
+  // (폰 뒤로가기는 transport 화면 자체의 popstate로 처리)
 
   let html = `<div class="hub-detail-back" onclick="closeHubDetail()">
     <span class="hub-detail-back-btn">‹</span>
@@ -2456,7 +2451,7 @@ function transportBack() {
   if (detail && detail.style.display !== 'none') {
     closeHubDetail();
   } else {
-    showScreen('transport');
+    showScreen('home');
   }
 }
 
