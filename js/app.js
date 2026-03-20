@@ -97,9 +97,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const screen = e.state?.screen || 'home';
     const hubDetail = e.state?.hubDetail;
 
-    // 허브 상세에서 뒤로가기 → 카드 목록으로
+    // 허브 상세에서 뒤로가기 → 카드 목록으로 (history는 이미 pop됨)
     if (hubDetail) {
-      closeHubDetail();
+      // hub-detail 닫고 카드 목록 복원 (history 조작 없이 화면만)
+      const grid = document.getElementById('hub-grid');
+      const hint = grid?.nextElementSibling;
+      const detail = document.getElementById('hub-detail');
+      if (grid) grid.style.display = 'grid';
+      if (hint) hint.style.display = 'block';
+      if (detail) { detail.style.display = 'none'; detail.innerHTML = ''; }
+      // transport 화면이 현재 화면이 아니면 표시
+      if (currentScreen !== 'transport') showScreenNoHistory('transport');
       return;
     }
 
@@ -2454,14 +2462,11 @@ function transportBack() {
 
 function closeHubDetail() {
   const grid = document.getElementById('hub-grid');
-  const hint = grid.nextElementSibling;
+  const hint = grid?.nextElementSibling;
   const detail = document.getElementById('hub-detail');
-  grid.style.display = 'grid';
+  if (grid) grid.style.display = 'grid';
   if (hint) hint.style.display = 'block';
-  detail.style.display = 'none';
-  detail.innerHTML = '';
-  // history 스택에서 hubDetail 항목 제거
-  history.replaceState({ screen: 'transport' }, '', '');
+  if (detail) { detail.style.display = 'none'; detail.innerHTML = ''; }
 }
 
 // ==================== 정류장 시간표 ====================
