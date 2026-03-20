@@ -1274,25 +1274,38 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
   }
 
   // 복귀시에는
+  // 추천 경로 도착 시각 + 30분 = 복귀 기준 시각
+  const bestArriveTime = calcArrivalTime(best.boardTime || best.nextBus, best.minutes);
+  const [baH, baM] = bestArriveTime.split(':').map(Number);
+  const retBaseMin = baH * 60 + baM + 30;
+  const retBaseStr = `${String(Math.floor(retBaseMin/60)%24).padStart(2,'0')}:${String(retBaseMin%60).padStart(2,'0')}`;
+
   html += '<div class="result-section-label" style="margin-top:4px">복귀시에는</div>';
-  const returnRoute = findReturnRoute(dayType);
+  const returnRoute = findReturnRoute(dayType, retBaseMin);
   if (returnRoute && !returnRoute.notFound) {
     if (returnRoute.isTransfer) {
-      // 환승 복귀
+      // 환승 복귀 — 각 구간 다음 버스 시각 계산
       const zoneColor1 = getZoneColor(returnRoute.route);
       const zoneColor2 = getZoneColor(returnRoute.route2);
+      const retNext1 = getNextBusAfter(returnRoute.route, retBaseMin, dayType);
+      const retNext2 = retNext1 ? getNextBusAfter(returnRoute.route2, retBaseMin, dayType) : null;
+      const timeInfo = retNext1
+        ? `<span style="color:#E24B4A;font-weight:700">${retNext1}</span><span style="color:#555;font-size:11px"> 출발</span>`
+        : `<span style="color:#aaa;font-size:11px">오늘 운행 종료</span>`;
       html += `<div style="margin:0 10px 8px;background:#fff;border:.5px solid #ddd;border-radius:10px;padding:10px 12px">
+        <div style="font-size:10px;color:#aaa;margin-bottom:6px">${bestArriveTime} 도착 후 기준 (${retBaseStr} 이후)</div>
         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:6px">
           <span class="bus-pill" style="background:${zoneColor1}">${getBusDisplayNum(returnRoute.route)}</span>
           <span style="color:#888;font-size:12px">→ ${returnRoute.transferHub}에서</span>
           <span class="bus-pill" style="background:${zoneColor2}">${getBusDisplayNum(returnRoute.route2)}</span>
           <span style="color:#888;font-size:12px">환승</span>
         </div>
-        <div style="font-size:12px;color:#555">${toName} → ${fromName}</div>
+        <div style="font-size:13px">${timeInfo}</div>
+        <div style="font-size:11px;color:#555;margin-top:3px">${toName} → ${fromName}</div>
       </div>`;
     } else {
       // 직행 복귀
-      const retTimetableHtml = buildTimetableHtml(returnRoute.route, null, dayType, '#E24B4A');
+      const retTimetableHtml = buildTimetableHtmlAfter(returnRoute.route, retBaseMin, dayType, '#E24B4A');
       if (retTimetableHtml) {
         let retHtml = retTimetableHtml
           .replace('class="tt-fill"', 'class="tt-fill ret"')
@@ -1301,6 +1314,7 @@ function renderResults(results, toName, fromName, timeStr, dayType) {
           `${returnRoute.route['기점']} → ${returnRoute.route['종점']}`,
           `${toName} → ${fromName}`
         );
+        html += `<div style="font-size:10px;color:#aaa;margin:0 10px 4px">${bestArriveTime} 도착 후 기준 (${retBaseStr} 이후)</div>`;
         html += retHtml;
       }
     }
@@ -1531,6 +1545,55 @@ function renderRouteCard(r, idx, isBest, dayType) {
     ${timesRow}
   </div>`;
 }
+// 특정 분(min) 이후 첫 버스 시각 반환
+function getNextBusAfter(route, baseMin, dayType) {
+  const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+  const count = route[countKey] || 0;
+  if (!count || !route['첫차'] || !route['막차']) return null;
+  const [fh,fm] = route['첫차'].split(':').map(Number);
+  const [lh,lm] = route['막차'].split(':').map(Number);
+  const fMin=fh*60+fm, lMin=lh*60+lm;
+  const interval = count > 1 ? Math.round((lMin-fMin)/(count-1)) : 0;
+  for (let i = 0; i < count; i++) {
+    const t = fMin + interval*i;
+    if (t >= baseMin) return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+  }
+  return null;
+}
+
+// baseMin 이후 시간표 표시
+function buildTimetableHtmlAfter(route, baseMin, dayType, accentColor) {
+  const color = accentColor || '#1D9E75';
+  const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
+  const count = route[countKey] || 0;
+  if (!count || !route['첫차'] || !route['막차']) return '';
+  const [fh,fm] = route['첫차'].split(':').map(Number);
+  const [lh,lm] = route['막차'].split(':').map(Number);
+  const fMin=fh*60+fm, lMin=lh*60+lm;
+  const interval = count > 1 ? Math.round((lMin-fMin)/(count-1)) : 0;
+
+  let chipsHtml = '';
+  let isFirst = true;
+  for (let i = 0; i < count; i++) {
+    const t = fMin + interval*i;
+    if (t < baseMin) continue;
+    const tStr = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+    chipsHtml += `<div class="tt-chip ${isFirst ? 'next-dep' : ''}">
+      <div class="tt-chip-time">${tStr}</div>
+    </div>`;
+    isFirst = false;
+  }
+  if (!chipsHtml) return '';
+
+  return `<div class="tt-fill">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="background:${color};color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700">${getBusDisplayNum(route)}</span>
+      <span style="font-size:12px;color:#555">${route['기점']} → ${route['종점']}</span>
+    </div>
+    <div class="tt-grid">${chipsHtml}</div>
+  </div>`;
+}
+
 function buildTimetableHtml(route, nextBus, dayType, accentColor) {
   const color = accentColor || '#1D9E75';
   const countKey = dayType === 'weekday' ? '평일횟수' : dayType === 'sat' ? '토요일횟수' : '공휴일횟수';
@@ -1571,7 +1634,7 @@ function buildTimetableHtml(route, nextBus, dayType, accentColor) {
   </div>`;
 }
 
-function findReturnRoute(dayType) {
+function findReturnRoute(dayType, retBaseMin) {
   const retFromLat = searchState.to?.lat;
   const retFromLng = searchState.to?.lng;
   const retToLat   = searchState.from?.isGps ? myLocation.lat : searchState.from?.lat;
