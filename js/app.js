@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadData() {
   try {
-    const res = await fetch('data/routes.json');
+    const res = await fetch('data/routes_fixed.json');
     const all = await res.json();
     const SEOCHEON_HUBS = ['서천','장항','한산','비인','판교','기산','문산','화양','마서'];
     ROUTES = all.filter(r => {
