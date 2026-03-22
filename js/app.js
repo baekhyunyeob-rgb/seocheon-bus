@@ -85,51 +85,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
   initLocation();
   initZoneTabs();
-  initTransport();
   initFavorites();
   loadKakaoMap();
 
   // 초기 history 상태 설정
-  // PWA standalone 모드 대응: stack에 최소 2개 유지해야 popstate 발생
+  // guard state를 하나 더 쌓아 popstate가 반드시 발생하도록
   history.replaceState({ screen: 'home' }, '', '');
   history.pushState({ screen: 'home_guard' }, '', '');
 
-  // 폰 뒤로가기 - 각 화면의 ‹ 버튼과 동일한 로직
-  window.addEventListener('popstate', (e) => {
-    console.log('[뒤로가기] popstate 발생 / currentScreen:', currentScreen, '/ e.state:', JSON.stringify(e.state));
+  // 폰 뒤로가기 - 각 화면 ‹ 버튼과 동일한 로직
+  window.addEventListener('popstate', () => {
     switch (currentScreen) {
       case 'detail':
-        // detail 화면엔 back-btn 없음 → result로
+        // detail ‹ 없음 → result로
         showScreenNoHistory('result');
         history.pushState({ screen: 'result' }, '', '');
         break;
       case 'routes':
-        // routes 화면 ‹ = routesBack()
-        if (_timetableReturnScreen) {
-          const target = _timetableReturnScreen;
-          _timetableReturnScreen = null;
-          showScreenNoHistory(target);
-          history.pushState({ screen: target }, '', '');
-        } else {
-          showScreenNoHistory('home');
-          history.replaceState({ screen: 'home' }, '', '');
-        }
-        break;
-      case 'transport':
-        // transport 상세 열려있으면 닫기, 아니면 홈
-        const detail = document.getElementById('hub-detail');
-        if (detail && detail.style.display !== 'none') {
-          closeHubDetail();
-          history.pushState({ screen: 'transport' }, '', '');
-        } else {
-          showScreenNoHistory('home');
-          history.replaceState({ screen: 'home' }, '', '');
-        }
+        // routes ‹ = routesBack()
+        routesBack();
+        // routesBack 내부에서 showScreen 호출 시 pushState 되므로 guard 유지
         break;
       default:
-        // result, timetable, favorites 등 → 홈
+        // result, timetable, transport, favorites → 홈
         showScreenNoHistory('home');
+        // guard 다시 쌓기 (다음 뒤로가기도 동작하도록)
         history.replaceState({ screen: 'home' }, '', '');
+        history.pushState({ screen: 'home_guard' }, '', '');
         break;
     }
   });
@@ -2249,17 +2231,13 @@ function closeRouteDetail() {
 function initRoutesMap() {
   const container = document.getElementById('map-routes');
   if (!container) return;
+  // 카카오맵 SDK 준비 확인
   if (typeof kakao === 'undefined' || !kakao.maps) {
     setTimeout(initRoutesMap, 300);
     return;
   }
-  // ROUTE_COORDS 아직 미준비면 대기
-  if (ROUTE_COORDS.size === 0) {
-    setTimeout(initRoutesMap, 300);
-    return;
-  }
   kakao.maps.load(() => {
-    if (mapRoutes) return;
+    if (mapRoutes) return; // 이미 초기화됨
     mapRoutes = new kakao.maps.Map(container, {
       center: new kakao.maps.LatLng(36.0758, 126.6908),
       level: 10
@@ -2329,10 +2307,6 @@ function showRouteOnMap(route) {
     const bounds = new kakao.maps.LatLngBounds();
     allCoords.forEach(c => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
     mapRoutes.setBounds(bounds, 40);
-  } else {
-    // 좌표 없으면 서천 중심으로 유지
-    mapRoutes.setCenter(new kakao.maps.LatLng(36.0758, 126.6908));
-    mapRoutes.setLevel(10);
   }
 }
 
