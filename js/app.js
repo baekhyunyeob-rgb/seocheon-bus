@@ -2438,71 +2438,50 @@ async function fetchAndRenderTrain(body, st) {
 function renderTrainGrid(body, cols, stName) {
   const now    = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
-
-  // 전체 시간대 수집 (5시~24시 사이 존재하는 시간대)
-  const hourSet = new Set();
-  cols.forEach(col => col.trains.forEach(t => hourSet.add(Math.floor(t.depMin/60))));
-  const hours = [...hourSet].sort((a,b) => a-b);
-
-  // 각 시간대별, 열별 열차 매핑
-  const grid = {}; // grid[hour][colIdx] = train
-  hours.forEach(h => {
-    grid[h] = {};
-    cols.forEach((col, ci) => {
-      grid[h][ci] = col.trains.filter(t => Math.floor(t.depMin/60) === h);
-    });
-  });
-
-  const colW = `${Math.floor(100/cols.length)}%`;
   const colColor = ['#185FA5','#E24B4A'];
 
+  // 헤더
   let html = `
   <div style="position:sticky;top:0;z-index:10;background:#fff;border-bottom:1.5px solid #eee">
     <div style="display:flex">
-      <div style="width:36px;flex-shrink:0"></div>
+      <div style="width:32px;flex-shrink:0"></div>
       ${cols.map((col,i) => `
-        <div style="flex:1;padding:7px 4px;text-align:center;color:${colColor[i]||'#555'};font-size:12px;font-weight:700">
-          ${col.label} <span style="font-weight:400;font-size:11px">${col.arrName}행</span>
+        <div style="flex:1;padding:7px 4px;text-align:center;color:${colColor[i]};font-size:12px;font-weight:700">
+          ${col.label} <span style="font-weight:400;font-size:10px">${col.arrName}행</span>
         </div>`).join('')}
     </div>
   </div>`;
 
-  // 시간대별 렌더링 - 같은 시간대 열차는 한 행에 묶어서 표시
-  hours.forEach(h => {
-    const rowTrains = cols.map((col,ci) => grid[h][ci] || []);
-    // 한 행에 각 열의 모든 열차를 가로로 나열
+  // 05~23시 고정 행
+  for (let h = 5; h <= 23; h++) {
     html += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:36px;align-items:stretch">`;
-    html += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb;display:flex;align-items:center;justify-content:center">${String(h).padStart(2,'0')}</div>`;
+    html += `<div style="width:32px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb;display:flex;align-items:center;justify-content:center">${String(h).padStart(2,'0')}</div>`;
 
     cols.forEach((col, ci) => {
-      const trains = rowTrains[ci];
+      // 이 시간대(h) 열차 모두
+      const trains = col.trains.filter(t => Math.floor(t.depMin/60) === h);
       const nowNextIdx = col.trains.findIndex(tr => tr.depMin >= nowMin);
-      html += `<div style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:3px 1px">`;
-      if (trains.length === 0) {
-        html += `<div style="flex:1"></div>`;
-      } else {
-        trains.forEach(t => {
-          const isPast = t.depMin < nowMin;
-          const isNext = col.trains[nowNextIdx] === t;
-          const bg = isNext ? '#FFF8E1' : '';
-          const timeColor = isPast ? '#ccc' : colColor[ci];
-          html += `
-            <div onclick="showTrainDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
-              style="flex:1;min-width:44px;padding:3px 2px;cursor:pointer;background:${bg};border-radius:5px;text-align:center">
-              <div style="font-size:12px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''};white-space:nowrap">${t.dep}</div>
-              <div style="font-size:9px;color:#aaa">${t.grade.replace('호','')}</div>
-            </div>`;
-        });
-      }
+
+      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:2px;padding:3px 1px;align-items:center">`;
+      trains.forEach(t => {
+        const isPast = t.depMin < nowMin;
+        const isNext = col.trains[nowNextIdx] === t;
+        const bg = isNext ? '#FFF8E1' : '';
+        const tc = isPast ? '#ccc' : colColor[ci];
+        html += `<div onclick="showTrainDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
+          style="flex:1;min-width:40px;padding:3px 1px;cursor:pointer;background:${bg};border-radius:5px;text-align:center">
+          <div style="font-size:12px;font-weight:700;color:${tc};${isPast?'text-decoration:line-through':''}">${t.dep}</div>
+          <div style="font-size:9px;color:#aaa">${t.grade.replace('호','')}</div>
+        </div>`;
+      });
       html += `</div>`;
     });
     html += `</div>`;
-  });
+  }
 
-  // 예약 링크
-  html += `<div style="padding:14px;display:flex;gap:8px;border-top:1px solid #eee;margin-top:8px">
+  html += `<div style="padding:12px 14px;border-top:1px solid #eee">
     <a href="${BOOKING_LINKS.train.url}" target="_blank"
-      style="flex:1;background:#185FA5;color:#fff;border-radius:10px;padding:10px;text-align:center;font-size:13px;font-weight:700;text-decoration:none">
+      style="display:block;background:#185FA5;color:#fff;border-radius:10px;padding:10px;text-align:center;font-size:13px;font-weight:700;text-decoration:none">
       🚆 코레일 예약
     </a>
   </div>
@@ -2565,19 +2544,17 @@ function renderGridTimetable(body, data, type, terminalName) {
   const cols = data.filter(d => d.times.length > 0);
   const colColors = ['#EF9F27','#1D9E75','#7F77DD','#185FA5','#E24B4A','#3B6D11'];
 
-  // 각 열의 시간을 분 단위로 변환 (열별 독립 배열)
+  // 각 열의 시간을 분으로 변환
   const colTimes = cols.map(col => col.times.map(t => {
     const [th,tm] = t.split(':').map(Number);
     return { dep: t, depMin: th*60+tm, dest: col.dest, via: col.via, grade: col.grade };
   }));
 
-  // 행 수 = 가장 긴 열의 시간 수
-  const maxRows = Math.max(...colTimes.map(c => c.length));
-
-  const header = `
+  // 헤더
+  let html = `
   <div style="position:sticky;top:0;z-index:10;background:#fff;border-bottom:1.5px solid #eee">
     <div style="display:flex">
-      <div style="width:36px;flex-shrink:0"></div>
+      <div style="width:32px;flex-shrink:0"></div>
       ${cols.map((col,i) => `
         <div style="flex:1;padding:6px 2px;text-align:center;color:${colColors[i%colColors.length]};font-size:11px;font-weight:700">
           ${col.dest}
@@ -2585,43 +2562,31 @@ function renderGridTimetable(body, data, type, terminalName) {
     </div>
   </div>`;
 
-  let rows = '';
-  let lastHour = -1;
+  // 06~19시 고정 행 (터미널 운영 시간대)
+  for (let h = 6; h <= 19; h++) {
+    html += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:36px;align-items:stretch">`;
+    html += `<div style="width:32px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb;display:flex;align-items:center;justify-content:center">${String(h).padStart(2,'0')}</div>`;
 
-  for (let r = 0; r < maxRows; r++) {
-    // 이 행에 표시할 각 열의 시간
-    const rowItems = colTimes.map(times => times[r] || null);
+    colTimes.forEach((times, ci) => {
+      const items = times.filter(t => Math.floor(t.depMin/60) === h);
+      const nextMin = times.find(t => t.depMin >= nowMin)?.depMin;
 
-    // 이 행의 대표 시간 (첫 번째 존재하는 항목)
-    const firstItem = rowItems.find(t => t !== null);
-    if (!firstItem) continue;
-
-    const h = Math.floor(firstItem.depMin / 60);
-    const showLabel = h !== lastHour;
-    if (showLabel) lastHour = h;
-
-    rows += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:34px;align-items:center">`;
-    rows += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:${showLabel ? '#555' : '#ddd'}">${String(h).padStart(2,'0')}</div>`;
-
-    rowItems.forEach((t, ci) => {
-      if (!t) { rows += `<div style="flex:1"></div>`; return; }
-      const isPast  = t.depMin < nowMin;
-      const nextMin = colTimes[ci].find(x => x.depMin >= nowMin)?.depMin;
-      const isNext  = !isPast && t.depMin === nextMin;
-      const bg        = isNext ? '#FFF8E1' : '';
-      const timeColor = isPast ? '#ccc' : isNext ? '#E24B4A' : colColors[ci % colColors.length];
-      rows += `
-        <div onclick="showBusDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
-          style="flex:1;padding:4px 2px;cursor:pointer;background:${bg};border-radius:6px;margin:1px;text-align:center">
-          <div style="font-size:12px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''};white-space:nowrap">${t.dep}</div>
+      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:2px;padding:3px 1px;align-items:center">`;
+      items.forEach(t => {
+        const isPast = t.depMin < nowMin;
+        const isNext = t.depMin === nextMin;
+        const bg = isNext ? '#FFF8E1' : '';
+        const tc = isPast ? '#ccc' : isNext ? '#E24B4A' : colColors[ci%colColors.length];
+        html += `<div onclick="showBusDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
+          style="flex:1;min-width:40px;padding:3px 1px;cursor:pointer;background:${bg};border-radius:5px;text-align:center">
+          <div style="font-size:12px;font-weight:700;color:${tc};${isPast?'text-decoration:line-through':''}">${t.dep}</div>
         </div>`;
+      });
+      html += `</div>`;
     });
-    rows += `</div>`;
+    html += `</div>`;
   }
 
-  let html = header + rows;
-
-  // 예약 링크
   html += `<div style="padding:10px 14px;font-size:10px;color:#aaa;border-top:.5px solid #eee;line-height:1.8">
     익산행은 군산을 경유합니다<br>
     <span style="color:#ccc">※ 실제 시간표와 다를 수 있습니다</span>
