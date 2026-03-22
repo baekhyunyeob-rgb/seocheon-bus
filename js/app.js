@@ -2153,8 +2153,12 @@ function showRouteTimetable(routeNum, idx) {
     : ROUTES.find(r => r['번호'] === routeNum);
   if (!route) return;
 
-  // 지도에 노선 표시
-  if (mapRoutes) showRouteOnMap(route);
+  // 지도에 노선 표시 (지도 준비될 때까지 대기)
+  const tryShowOnMap = () => {
+    if (mapRoutes) showRouteOnMap(route);
+    else setTimeout(tryShowOnMap, 200);
+  };
+  tryShowOnMap();
 
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
@@ -2229,9 +2233,17 @@ function closeRouteDetail() {
 function initRoutesMap() {
   const container = document.getElementById('map-routes');
   if (!container) return;
-  mapRoutes = new kakao.maps.Map(container, {
-    center: new kakao.maps.LatLng(36.0758, 126.6908),
-    level: 10
+  // 카카오맵 SDK 준비 확인
+  if (typeof kakao === 'undefined' || !kakao.maps) {
+    setTimeout(initRoutesMap, 300);
+    return;
+  }
+  kakao.maps.load(() => {
+    if (mapRoutes) return; // 이미 초기화됨
+    mapRoutes = new kakao.maps.Map(container, {
+      center: new kakao.maps.LatLng(36.0758, 126.6908),
+      level: 10
+    });
   });
 }
 
@@ -2469,7 +2481,7 @@ function renderTrainGrid(body, cols, stName) {
         const nowNextIdx = col.trains.findIndex(tr => tr.depMin >= nowMin);
         const isNext = col.trains[nowNextIdx] === t;
         const bg = isNext ? '#FFF8E1' : '';
-        const timeColor = isPast ? '#ccc' : isNext ? '#E24B4A' : colColor[ci];
+        const timeColor = isPast ? '#ccc' : colColor[ci];
         html += `
           <div onclick="showTrainDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
             style="flex:1;padding:4px;cursor:pointer;background:${bg};border-radius:6px;margin:1px;text-align:center">
@@ -2650,7 +2662,7 @@ function showBusDetail(t) {
       </div>
     </div>
     <div style="background:#f8f8f8;border-radius:10px;padding:10px 14px;font-size:12px;color:#666">
-      경유: ${t.via || '직통'}
+      ${t.via || '직통'}
     </div>
   `;
 
