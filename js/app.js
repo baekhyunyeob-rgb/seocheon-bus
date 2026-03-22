@@ -2250,6 +2250,85 @@ let routePolyline = null;
 
 const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
 
+// 경유 문자열 파싱 → 구간별 방향 정보 반환
+// 반환: [{name, dir}] dir: 'fwd'(→단방향) | 'both'(↔양방향)
+function parseRouteSegments(route) {
+  const via = (route['경유'] || '').replace(/[()]/g, '');
+  const tokens = via.split(/(→|↔)/);
+  const items = [{ name: route['기점'], dir: null }];
+  let lastDir = 'fwd';
+  tokens.forEach(tok => {
+    const t = tok.trim();
+    if (t === '→') { lastDir = 'fwd'; }
+    else if (t === '↔') { lastDir = 'both'; }
+    else if (t) { items.push({ name: t, dir: lastDir }); }
+  });
+  items.push({ name: route['종점'], dir: lastDir });
+  return items;
+}
+
+// 경로 위에 방향 화살표 오버레이 추가
+function addArrowsOnPath(path, color, bothWay = false) {
+  if (path.length < 2) return;
+  // 일정 간격마다 화살표 추가
+  const step = Math.max(1, Math.floor(path.length / 6));
+  for (let i = step; i < path.length - 1; i += step) {
+    const p1 = path[i], p2 = path[i + 1];
+    const angle = Math.atan2(
+      p2.getLng() - p1.getLng(),
+      p2.getLat() - p1.getLat()
+    ) * 180 / Math.PI;
+    const mid = new kakao.maps.LatLng(
+      (p1.getLat() + p2.getLat()) / 2,
+      (p1.getLng() + p2.getLng()) / 2
+    );
+    const arrows = bothWay
+      ? `<div style="display:flex;gap:2px">
+           <div style="transform:rotate(${angle}deg);color:${color};font-size:13px;line-height:1;text-shadow:0 0 3px #fff">▲</div>
+           <div style="transform:rotate(${angle+180}deg);color:${color};font-size:13px;line-height:1;text-shadow:0 0 3px #fff">▲</div>
+         </div>`
+      : `<div style="transform:rotate(${angle}deg);color:${color};font-size:13px;line-height:1;text-shadow:0 0 3px #fff">▲</div>`;
+    const ov = new kakao.maps.CustomOverlay({
+      position: mid,
+      content: `<div style="display:flex;align-items:center;justify-content:center">${arrows}</div>`,
+      yAnchor: 0.5, zIndex: 4
+    });
+    ov.setMap(mapRoutes);
+    routeMarkers.push(ov);
+  }
+}
+
+// 카카오 모빌리티 API로 구간 경로 요청
+async function fetchRoadPath(coords) {
+  if (coords.length < 2) return null;
+  const origin = `${coords[0].lng},${coords[0].lat}`;
+  const dest   = `${coords[coords.length-1].lng},${coords[coords.length-1].lat}`;
+  const mids = coords.slice(1, -1);
+  const step = mids.length <= 5 ? 1 : Math.floor(mids.length / 5);
+  const waypts = [];
+  for (let i = 0; i < mids.length && waypts.length < 5; i += step) {
+    waypts.push(`${mids[i].lng},${mids[i].lat}`);
+  }
+  const wpParam = waypts.length ? '&waypoints=' + waypts.join('|') : '';
+  const url = `https://apis-navi.kakaomobility.com/v1/directions?origin=${origin}&destination=${dest}${wpParam}&priority=RECOMMEND`;
+  try {
+    const res = await fetch(url, { headers: { 'Authorization': `KakaoAK ${KAKAO_REST_KEY}` } });
+    const data = await res.json();
+    const sections = data.routes?.[0]?.sections;
+    if (!sections?.length) return null;
+    const path = [];
+    sections.forEach(sec => {
+      (sec.roads || []).forEach(road => {
+        const vx = road.vertexes || [];
+        for (let i = 0; i < vx.length - 1; i += 2) {
+          path.push(new kakao.maps.LatLng(vx[i+1], vx[i]));
+        }
+      });
+    });
+    return path.length >= 2 ? path : null;
+  } catch { return null; }
+}
+
 function showRouteOnMap(route) {
   if (!mapRoutes) return;
   routeMarkers.forEach(m => m.setMap(null));
@@ -2292,57 +2371,43 @@ function showRouteOnMap(route) {
     routeMarkers.push(dot);
   });
 
-  // 지도 범위 먼저 조정
+  // 지도 범위 조정
   const bounds = new kakao.maps.LatLngBounds();
   allCoords.forEach(c => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
   mapRoutes.setBounds(bounds, 40);
 
-  // 카카오 모빌리티 API 도로 기반 경로
-  const origin = `${allCoords[0].lng},${allCoords[0].lat}`;
-  const dest   = `${allCoords[allCoords.length-1].lng},${allCoords[allCoords.length-1].lat}`;
-  const midCoords = allCoords.slice(1, -1);
-  const step = midCoords.length <= 5 ? 1 : Math.floor(midCoords.length / 5);
-  const waypts = [];
-  for (let i = 0; i < midCoords.length && waypts.length < 5; i += step) {
-    waypts.push(`${midCoords[i].lng},${midCoords[i].lat}`);
-  }
-  const wpParam = waypts.length ? '&waypoints=' + waypts.join('|') : '';
-  const url = `https://apis-navi.kakaomobility.com/v1/directions?origin=${origin}&destination=${dest}${wpParam}&priority=RECOMMEND`;
+  // 왕복/순환 구간 탐지
+  const segments = parseRouteSegments(route);
+  const nameCount = {};
+  segments.forEach(s => { nameCount[s.name] = (nameCount[s.name] || 0) + 1; });
+  const hasRoundtrip = Object.values(nameCount).some(c => c > 1);
+  const isBoth = segments.some(s => s.dir === 'both');
 
-  fetch(url, { headers: { 'Authorization': `KakaoAK ${KAKAO_REST_KEY}` } })
-    .then(r => r.json())
-    .then(data => {
-      const sections = data.routes?.[0]?.sections;
-      if (!sections?.length) throw new Error('no route');
-      const path = [];
-      sections.forEach(sec => {
-        (sec.roads || []).forEach(road => {
-          const vx = road.vertexes || [];
-          for (let i = 0; i < vx.length - 1; i += 2) {
-            path.push(new kakao.maps.LatLng(vx[i+1], vx[i]));
-          }
-        });
-      });
-      if (path.length < 2) throw new Error('empty path');
-      routePolyline = new kakao.maps.Polyline({
-        map: mapRoutes, path,
-        strokeWeight: 4, strokeColor: color,
-        strokeOpacity: 0.85, strokeStyle: 'solid'
-      });
+  // 도로 기반 경로 + 화살표
+  (async () => {
+    const path = await fetchRoadPath(allCoords);
+    const drawPath = path || allCoords.map(c => new kakao.maps.LatLng(c.lat, c.lng));
+    const style = path ? 'solid' : 'dashed';
+    const opacity = path ? 0.85 : 0.7;
+
+    const poly = new kakao.maps.Polyline({
+      map: mapRoutes, path: drawPath,
+      strokeWeight: 4, strokeColor: color,
+      strokeOpacity: opacity, strokeStyle: style
+    });
+    routePolyline = poly;
+
+    // 화살표 추가 (왕복 또는 순환이면 항상, 일반도 방향 표시)
+    addArrowsOnPath(drawPath, color, isBoth || hasRoundtrip);
+
+    if (path) {
       const rb = new kakao.maps.LatLngBounds();
       path.forEach(p => rb.extend(p));
       mapRoutes.setBounds(rb, 40);
-    })
-    .catch(() => {
-      // fallback: 직선
-      routePolyline = new kakao.maps.Polyline({
-        map: mapRoutes,
-        path: allCoords.map(c => new kakao.maps.LatLng(c.lat, c.lng)),
-        strokeWeight: 4, strokeColor: color,
-        strokeOpacity: 0.7, strokeStyle: 'dashed'
-      });
-    });
+    }
+  })();
 }
+
 
 
 // ==================== 시외버스·기차 ====================
