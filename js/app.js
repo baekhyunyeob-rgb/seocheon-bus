@@ -2248,30 +2248,39 @@ function initRoutesMap() {
 let routeMarkers = [];
 let routePolyline = null;
 
+const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
+
 function showRouteOnMap(route) {
   if (!mapRoutes) return;
   routeMarkers.forEach(m => m.setMap(null));
   routeMarkers = [];
-  if (routePolyline) { routePolyline.setMap(null); routePolyline = null; }
-
-  const color = getZoneColor(route);
-
-  // ROUTE_COORDS에서 전체 경유지 좌표 가져오기
-  const allCoords = (getRouteCoords(route) || []).filter(c => c.lat);
-
-  // 폴리라인 그리기
-  if (allCoords.length >= 2) {
-    routePolyline = new kakao.maps.Polyline({
-      map: mapRoutes,
-      path: allCoords.map(c => new kakao.maps.LatLng(c.lat, c.lng)),
-      strokeWeight: 4,
-      strokeColor: color,
-      strokeOpacity: 0.85,
-      strokeStyle: 'solid'
-    });
+  if (routePolyline) {
+    if (Array.isArray(routePolyline)) routePolyline.forEach(p => p.setMap(null));
+    else routePolyline.setMap(null);
+    routePolyline = null;
   }
 
-  // 중간 경유지 작은 점
+  const color = getZoneColor(route);
+  const allCoords = (getRouteCoords(route) || []).filter(c => c.lat);
+  if (allCoords.length < 2) {
+    mapRoutes.setCenter(new kakao.maps.LatLng(36.0758, 126.6908));
+    mapRoutes.setLevel(10);
+    return;
+  }
+
+  // 기점/종점 마커
+  const addMarker = (lat, lng, isStart) => {
+    const c = isStart ? '#185FA5' : '#E24B4A';
+    new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(lat, lng),
+      content: `<div style="width:10px;height:10px;background:${c};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+      yAnchor: 0.5, zIndex: 5
+    }).setMap(mapRoutes);
+  };
+  addMarker(allCoords[0].lat, allCoords[0].lng, true);
+  addMarker(allCoords[allCoords.length-1].lat, allCoords[allCoords.length-1].lng, false);
+
+  // 중간 경유지 점
   allCoords.forEach((c, i) => {
     if (i === 0 || i === allCoords.length - 1) return;
     const dot = new kakao.maps.CustomOverlay({
@@ -2283,32 +2292,58 @@ function showRouteOnMap(route) {
     routeMarkers.push(dot);
   });
 
-  // 기점/종점 마커 — 간결하게 작은 원으로
-  const addMarker = (lat, lng, isStart) => {
-    const c = isStart ? '#185FA5' : '#E24B4A';
-    const overlay = new kakao.maps.CustomOverlay({
-      position: new kakao.maps.LatLng(lat, lng),
-      content: `<div style="display:flex;flex-direction:column;align-items:center">
-        <div style="width:10px;height:10px;background:${c};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>
-      </div>`,
-      yAnchor: 0.5, zIndex: 5
+  // 지도 범위 먼저 조정
+  const bounds = new kakao.maps.LatLngBounds();
+  allCoords.forEach(c => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
+  mapRoutes.setBounds(bounds, 40);
+
+  // 카카오 모빌리티 API 도로 기반 경로
+  const origin = `${allCoords[0].lng},${allCoords[0].lat}`;
+  const dest   = `${allCoords[allCoords.length-1].lng},${allCoords[allCoords.length-1].lat}`;
+  const midCoords = allCoords.slice(1, -1);
+  const step = midCoords.length <= 5 ? 1 : Math.floor(midCoords.length / 5);
+  const waypts = [];
+  for (let i = 0; i < midCoords.length && waypts.length < 5; i += step) {
+    waypts.push(`${midCoords[i].lng},${midCoords[i].lat}`);
+  }
+  const wpParam = waypts.length ? '&waypoints=' + waypts.join('|') : '';
+  const url = `https://apis-navi.kakaomobility.com/v1/directions?origin=${origin}&destination=${dest}${wpParam}&priority=RECOMMEND`;
+
+  fetch(url, { headers: { 'Authorization': `KakaoAK ${KAKAO_REST_KEY}` } })
+    .then(r => r.json())
+    .then(data => {
+      const sections = data.routes?.[0]?.sections;
+      if (!sections?.length) throw new Error('no route');
+      const path = [];
+      sections.forEach(sec => {
+        (sec.roads || []).forEach(road => {
+          const vx = road.vertexes || [];
+          for (let i = 0; i < vx.length - 1; i += 2) {
+            path.push(new kakao.maps.LatLng(vx[i+1], vx[i]));
+          }
+        });
+      });
+      if (path.length < 2) throw new Error('empty path');
+      routePolyline = new kakao.maps.Polyline({
+        map: mapRoutes, path,
+        strokeWeight: 4, strokeColor: color,
+        strokeOpacity: 0.85, strokeStyle: 'solid'
+      });
+      const rb = new kakao.maps.LatLngBounds();
+      path.forEach(p => rb.extend(p));
+      mapRoutes.setBounds(rb, 40);
+    })
+    .catch(() => {
+      // fallback: 직선
+      routePolyline = new kakao.maps.Polyline({
+        map: mapRoutes,
+        path: allCoords.map(c => new kakao.maps.LatLng(c.lat, c.lng)),
+        strokeWeight: 4, strokeColor: color,
+        strokeOpacity: 0.7, strokeStyle: 'dashed'
+      });
     });
-    overlay.setMap(mapRoutes);
-    routeMarkers.push(overlay);
-  };
-
-  if (allCoords.length > 0) {
-    addMarker(allCoords[0].lat, allCoords[0].lng, true);
-    addMarker(allCoords[allCoords.length-1].lat, allCoords[allCoords.length-1].lng, false);
-  }
-
-  // 지도 범위 조정
-  if (allCoords.length > 0) {
-    const bounds = new kakao.maps.LatLngBounds();
-    allCoords.forEach(c => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
-    mapRoutes.setBounds(bounds, 40);
-  }
 }
+
 
 // ==================== 시외버스·기차 ====================
 
