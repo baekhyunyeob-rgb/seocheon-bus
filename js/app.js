@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
   initLocation();
   initZoneTabs();
-  initHubGrid();
+  initTransport();
   initFavorites();
   loadKakaoMap();
 
