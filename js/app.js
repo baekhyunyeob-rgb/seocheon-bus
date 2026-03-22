@@ -2411,9 +2411,10 @@ async function fetchAndRenderTrain(body, st) {
           arr:   `${t.arrplandtime.slice(8,10)}:${t.arrplandtime.slice(10,12)}`,
           grade: t.traingradename,
           no:    t.trainno,
-          arrName: col.arrName,
-          label: col.label
-        })).filter(t => t.depMin <= 23*60+59).sort((a,b) => a.depMin - b.depMin);
+          arrName: col.arrName + '역',
+          label: col.label,
+          stName: st.name
+        })).filter(t => t.depMin >= 5*60).sort((a,b) => a.depMin - b.depMin);
       });
       _trainCache[cacheKey] = colData;
     }
@@ -2462,14 +2463,14 @@ function renderTrainGrid(body, cols, stName) {
       const trains = col.trains.filter(t => Math.floor(t.depMin/60) === h);
       const nowNextIdx = col.trains.findIndex(tr => tr.depMin >= nowMin);
 
-      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:2px;padding:3px 1px;align-items:center">`;
+      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:3px;padding:3px 4px;align-items:center;justify-content:flex-start">`;
       trains.forEach(t => {
         const isPast = t.depMin < nowMin;
         const isNext = col.trains[nowNextIdx] === t;
         const bg = isNext ? '#FFF8E1' : '';
         const tc = isPast ? '#ccc' : colColor[ci];
         html += `<div onclick="showTrainDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
-          style="flex:1;min-width:40px;padding:3px 1px;cursor:pointer;background:${bg};border-radius:5px;text-align:center">
+          style="flex:0 0 auto;padding:3px 4px;cursor:pointer;background:${bg};border-radius:5px;text-align:center">
           <div style="font-size:12px;font-weight:700;color:${tc};${isPast?'text-decoration:line-through':''}">${t.dep}</div>
           <div style="font-size:9px;color:#aaa">${t.grade.replace('호','')}</div>
         </div>`;
@@ -2513,7 +2514,7 @@ function showTrainDetail(t) {
       <div>
         <div style="font-size:11px;color:#aaa">출발</div>
         <div style="font-size:22px;font-weight:800;color:#185FA5">${t.dep}</div>
-        <div style="font-size:12px;color:#555">${t.label?.includes('상') ? '서천역/장항역/판교역' : '서천역/장항역/판교역'}</div>
+        <div style="font-size:12px;color:#555">${t.stName || '해당역'}</div>
       </div>
       <div style="font-size:20px;color:#ddd">→</div>
       <div style="text-align:right">
@@ -2523,7 +2524,7 @@ function showTrainDetail(t) {
       </div>
     </div>
     <div style="background:#f8f8f8;border-radius:10px;padding:10px 14px;font-size:12px;color:#666">
-      장항선 · ${t.label?.includes('상') ? '장항 → 서천 → … → 용산' : '용산 → … → 서천 → 장항 → 익산'}
+      장항선 · ${t.label?.includes('상') ? '대천 → 홍성 → 천안 경유' : '천안 → 홍성 → 대천 경유'}
     </div>
   `;
 
@@ -2571,7 +2572,7 @@ function renderGridTimetable(body, data, type, terminalName) {
       const items = times.filter(t => Math.floor(t.depMin/60) === h);
       const nextMin = times.find(t => t.depMin >= nowMin)?.depMin;
 
-      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:2px;padding:3px 1px;align-items:center">`;
+      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:3px;padding:3px 4px;align-items:center;justify-content:flex-start">`;
       items.forEach(t => {
         const isPast = t.depMin < nowMin;
         const isNext = t.depMin === nextMin;
