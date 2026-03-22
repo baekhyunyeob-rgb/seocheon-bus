@@ -2231,22 +2231,37 @@ function closeRouteDetail() {
 function initRoutesMap() {
   const container = document.getElementById('map-routes');
   if (!container) return;
-  // 카카오맵 SDK 준비 확인
   if (typeof kakao === 'undefined' || !kakao.maps) {
     setTimeout(initRoutesMap, 300);
     return;
   }
+  if (ROUTE_COORDS.size === 0) {
+    setTimeout(initRoutesMap, 300);
+    return;
+  }
   kakao.maps.load(() => {
-    if (mapRoutes) return; // 이미 초기화됨
+    if (mapRoutes) return;
     mapRoutes = new kakao.maps.Map(container, {
       center: new kakao.maps.LatLng(36.0758, 126.6908),
       level: 10
+    });
+    // 축척 변경 시 화살표 재조정
+    kakao.maps.event.addListener(mapRoutes, 'zoom_changed', () => {
+      if (currentDrawnPath) {
+        // 기존 화살표만 제거 후 재생성
+        routeMarkers.forEach(m => m.setMap(null));
+        routeMarkers = [];
+        addArrowsOnPath(currentDrawnPath, currentDrawnColor, currentDrawnBothWay);
+      }
     });
   });
 }
 
 let routeMarkers = [];
 let routePolyline = null;
+let currentDrawnPath = null;  // 현재 그려진 도로 경로 저장
+let currentDrawnColor = null; // 현재 노선 색상
+let currentDrawnBothWay = false; // 왕복 여부
 
 const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
 
@@ -2269,29 +2284,50 @@ function parseRouteSegments(route) {
 
 // 경로 위에 방향 화살표 오버레이 추가
 function addArrowsOnPath(path, color, bothWay = false) {
-  if (path.length < 2) return;
-  // 일정 간격마다 화살표 추가
-  const step = Math.max(1, Math.floor(path.length / 6));
+  if (!path || path.length < 2) return;
+
+  // 현재 지도 레벨에 따라 화살표 간격 조정
+  const level = mapRoutes ? mapRoutes.getLevel() : 8;
+  // 레벨 낮을수록(확대) 더 자주, 높을수록(축소) 더 드물게
+  const arrowCount = level <= 5 ? 8 : level <= 8 ? 5 : 3;
+  const step = Math.max(2, Math.floor(path.length / arrowCount));
+
   for (let i = step; i < path.length - 1; i += step) {
     const p1 = path[i], p2 = path[i + 1];
-    const angle = Math.atan2(
-      p2.getLng() - p1.getLng(),
-      p2.getLat() - p1.getLat()
-    ) * 180 / Math.PI;
+    const dx = p2.getLng() - p1.getLng();
+    const dy = p2.getLat() - p1.getLat();
+    const angle = Math.atan2(dx, dy) * 180 / Math.PI;
+
     const mid = new kakao.maps.LatLng(
       (p1.getLat() + p2.getLat()) / 2,
       (p1.getLng() + p2.getLng()) / 2
     );
-    const arrows = bothWay
-      ? `<div style="display:flex;gap:2px">
-           <div style="transform:rotate(${angle}deg);color:${color};font-size:13px;line-height:1;text-shadow:0 0 3px #fff">▲</div>
-           <div style="transform:rotate(${angle+180}deg);color:${color};font-size:13px;line-height:1;text-shadow:0 0 3px #fff">▲</div>
-         </div>`
-      : `<div style="transform:rotate(${angle}deg);color:${color};font-size:13px;line-height:1;text-shadow:0 0 3px #fff">▲</div>`;
+
+    const arrowStyle = `
+      width:22px;height:22px;
+      background:white;
+      border:2px solid ${color};
+      border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:0 1px 4px rgba(0,0,0,0.3);
+    `;
+    const arrowIcon = `<div style="transform:rotate(${angle}deg);color:${color};font-size:14px;font-weight:900;line-height:1;margin-top:-1px">▲</div>`;
+
+    let content;
+    if (bothWay) {
+      const backIcon = `<div style="transform:rotate(${angle+180}deg);color:${color};font-size:14px;font-weight:900;line-height:1;margin-top:-1px">▲</div>`;
+      content = `<div style="display:flex;gap:3px">
+        <div style="${arrowStyle}">${arrowIcon}</div>
+        <div style="${arrowStyle}">${backIcon}</div>
+      </div>`;
+    } else {
+      content = `<div style="${arrowStyle}">${arrowIcon}</div>`;
+    }
+
     const ov = new kakao.maps.CustomOverlay({
       position: mid,
-      content: `<div style="display:flex;align-items:center;justify-content:center">${arrows}</div>`,
-      yAnchor: 0.5, zIndex: 4
+      content: `<div style="pointer-events:none">${content}</div>`,
+      yAnchor: 0.5, zIndex: 6
     });
     ov.setMap(mapRoutes);
     routeMarkers.push(ov);
@@ -2397,8 +2433,13 @@ function showRouteOnMap(route) {
     });
     routePolyline = poly;
 
-    // 화살표 추가 (왕복 또는 순환이면 항상, 일반도 방향 표시)
-    addArrowsOnPath(drawPath, color, isBoth || hasRoundtrip);
+    // 현재 경로 전역 저장 (zoom_changed 시 재사용)
+    currentDrawnPath = drawPath;
+    currentDrawnColor = color;
+    currentDrawnBothWay = isBoth || hasRoundtrip;
+
+    // 화살표 추가
+    addArrowsOnPath(drawPath, color, currentDrawnBothWay);
 
     if (path) {
       const rb = new kakao.maps.LatLngBounds();
