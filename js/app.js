@@ -99,11 +99,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (screen === 'transport') {
       const detail = document.getElementById('hub-detail');
       if (detail && detail.style.display !== 'none') {
-        // 상세화면 → 카드목록 (스택에 transport가 하나 더 있음)
         closeHubDetail();
+        history.pushState({ screen: 'transport' }, '', '');
         return;
       }
-      // 카드목록 → 홈
       showScreenNoHistory('home');
       history.replaceState({ screen: 'home' }, '', '');
       return;
@@ -458,6 +457,7 @@ function showScreen(name) {
   if (name === 'routes' && !mapRoutes) {
     setTimeout(() => initRoutesMap(), 100);
   }
+  if (name === 'transport') initTransport();
   if (name === 'favorites') renderFavorites();
 
   // 홈이 아닌 화면으로 이동 시 history에 추가
@@ -2300,175 +2300,175 @@ function showRouteOnMap(route) {
   }
 }
 
-// ==================== 고속·기차 ====================
-function initHubGrid() {
-  const container = document.getElementById('hub-grid');
-  if (!container) return;
+// ==================== 시외버스·기차 ====================
 
-  let html = '';
-  HUBS.forEach((hub, i) => {
-    const isNearest = i === 0;
-    const dist = isNearest ? '도보 8분' : i === 1 ? '차 12분' : i === 2 ? '차 18분' : '차 20분';
-    const now = new Date();
-    const nowMin = now.getHours() * 60 + now.getMinutes();
+// 서천터미널 시간표 데이터
+const SEOCHEON_TERMINAL_DATA = [
+  { dest:'서울(남부)', via:'직통', times:['07:40','09:20','11:00','12:40','14:20','16:00','17:40','19:10'] },
+  { dest:'대전(복합)', via:'부여·논산', times:['07:05','08:35','10:25','12:15','13:55','15:45','17:25','19:15'] },
+  { dest:'세종', via:'부여·공주', times:['08:15','12:50','16:35'] },
+  { dest:'천안', via:'홍성·예산', times:['09:10','13:20','17:50'] },
+  { dest:'군산', via:'장항경유', times:['07:25','08:25','09:25','10:25','11:25','12:25','13:25','14:25','15:25','16:25','17:25','18:25'] },
+  { dest:'익산', via:'군산경유', times:['08:50','11:15','14:30','17:55'] },
+];
 
-    // 기차(상행/하행) vs 버스(destinations) 구분
-    const destList = hub.direction ? hub.upward : hub.destinations;
-    const nextDest = destList[0];
-    const nextTime = nextDest.times.find(t => {
-      const [th, tm] = t.split(':').map(Number);
-      return th * 60 + tm >= nowMin;
-    }) || '운행종료';
-    const nextDest2 = destList.length > 1 ? destList[1] : null;
-    const nextTime2 = nextDest2 ? (nextDest2.times.find(t => {
-      const [th,tm] = t.split(':').map(Number); return th*60+tm >= nowMin;
-    }) || '') : '';
+// 장항터미널 시간표 데이터
+const JANGHANG_TERMINAL_DATA = [
+  { dest:'서울(남부)', via:'서천경유', times:['07:20','09:00','10:40','12:20','14:00','15:40','17:20','18:50'] },
+  { dest:'대전(복합)', via:'서천경유', times:['06:45','08:15','10:05','11:55','13:35','15:25','17:05','18:55'] },
+  { dest:'군산', via:'직통', times:[] }, // 서천 출발 20분 후
+];
 
-    const iconColor = hub.type === 'train' ? '#3B6D11' : '#0F6E56';
-    const iconBg = hub.type === 'train' ? '#EAF3DE' : '#E1F5EE';
-    const icon = hub.type === 'train'
-      ? `<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="2" width="11" height="8" rx="1.2" stroke="${iconColor}" stroke-width="1.1"/><line x1="1.5" y1="5.5" x2="12.5" y2="5.5" stroke="${iconColor}" stroke-width=".9"/><line x1="4" y1="10" x2="3" y2="12.5" stroke="${iconColor}" stroke-width=".9" stroke-linecap="round"/><line x1="10" y1="10" x2="11" y2="12.5" stroke="${iconColor}" stroke-width=".9" stroke-linecap="round"/></svg>`
-      : `<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="4" width="12" height="7" rx="1.5" stroke="${iconColor}" stroke-width="1.1"/><circle cx="3.5" cy="11" r="1" fill="${iconColor}"/><circle cx="10.5" cy="11" r="1" fill="${iconColor}"/></svg>`;
+// 코레일 API 역 ID
+const TRAIN_STATIONS = {
+  pangyoStation:   { name:'판교역', depId:'NAT081240', upArr:'NAT010032', downArr:'NAT030879', upName:'용산', downName:'익산' },
+  seocheonStation: { name:'서천역', depId:'NAT081343', upArr:'NAT010032', downArr:'NAT030879', upName:'용산', downName:'익산' },
+  janghangStation: { name:'장항역', depId:'NAT081318', upArr:'NAT010032', downArr:'NAT030879', upName:'용산', downName:'익산' },
+};
 
-    html += `<div class="hub-card ${isNearest ? 'nearest' : ''}" onclick="showHubDetail(${i})">
-      <div class="hub-top">
-        <div class="hub-icon" style="background:${iconBg}">${icon}</div>
-        <div>
-          <div class="hub-name">${hub.name}</div>
-          ${isNearest ? '<span class="hub-nearest-tag">가장 가까움</span>' : ''}
-        </div>
-      </div>
-      <div class="hub-dist">현위치에서 ${dist}</div>
-      <div class="hub-divider"></div>
-      <div class="hub-next">다음 ${nextTime} → ${nextDest.name.split('(')[0]}</div>
-      <div class="hub-more">${nextDest2 && nextTime2 ? `이후 ${nextTime2} · ${nextDest2.name.split('(')[0]}` : ''}</div>
-    </div>`;
-  });
+const TAGO_API_KEY = '58b48b0d19a525cf18e98d85a1b68cc560700393a7ed41f7538cc0758386b039';
+let currentTransportTab = 'seocheonStation';
 
-  container.innerHTML = html;
-  document.getElementById('hub-grid').insertAdjacentHTML('afterend',
-    '<div class="hub-hint">탭하면 전체 시간표 · 예매 링크</div>');
+function initTransport() {
+  showTransportTab('seocheonStation');
 }
 
-function showHubDetail(idx) {
-  const hub = HUBS[idx];
+function showTransportTab(tabId) {
+  currentTransportTab = tabId;
+  // 탭 활성화
+  document.querySelectorAll('.tr-tab').forEach(t => t.classList.remove('active'));
+  const tab = document.getElementById('tr-tab-' + tabId);
+  if (tab) tab.classList.add('active');
+
+  const body = document.getElementById('transport-body');
+  const sub = document.getElementById('transport-sub');
+  body.innerHTML = '<div style="text-align:center;padding:30px;color:#aaa;font-size:13px">불러오는 중...</div>';
+
+  if (tabId === 'seocheonTerminal') {
+    if (sub) sub.textContent = '서천터미널 시외버스';
+    renderTerminalTimetable(body, '서천터미널', SEOCHEON_TERMINAL_DATA);
+  } else if (tabId === 'janghangTerminal') {
+    if (sub) sub.textContent = '장항터미널 시외버스';
+    renderTerminalTimetable(body, '장항터미널', JANGHANG_TERMINAL_DATA);
+  } else {
+    const st = TRAIN_STATIONS[tabId];
+    if (sub) sub.textContent = `${st.name} · 장항선`;
+    fetchTrainTimetable(body, st);
+  }
+}
+
+async function fetchTrainTimetable(body, st) {
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const today = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+
+  try {
+    // 상행 (용산 방향)
+    const upUrl = `https://apis.data.go.kr/1613000/TrainInfo/GetStrtpntAlocFndTrainInfo?serviceKey=${TAGO_API_KEY}&_type=json&numOfRows=100&depPlaceId=${st.depId}&arrPlaceId=${st.upArr}&depPlandTime=${today}`;
+    // 하행 (익산 방향)
+    const downUrl = `https://apis.data.go.kr/1613000/TrainInfo/GetStrtpntAlocFndTrainInfo?serviceKey=${TAGO_API_KEY}&_type=json&numOfRows=100&depPlaceId=${st.depId}&arrPlaceId=${st.downArr}&depPlandTime=${today}`;
+
+    const [upRes, downRes] = await Promise.all([
+      fetch(upUrl).then(r => r.json()),
+      fetch(downUrl).then(r => r.json())
+    ]);
+
+    const parseTrains = (data) => {
+      const items = data?.response?.body?.items?.item || [];
+      return (Array.isArray(items) ? items : [items]).map(t => ({
+        time: `${t.depplandtime.slice(8,10)}:${t.depplandtime.slice(10,12)}`,
+        timeMin: parseInt(t.depplandtime.slice(8,10))*60 + parseInt(t.depplandtime.slice(10,12)),
+        grade: t.traingradename,
+        arr: `${t.arrplandtime.slice(8,10)}:${t.arrplandtime.slice(10,12)}`,
+        no: t.trainno
+      })).sort((a,b) => a.timeMin - b.timeMin);
+    };
+
+    const upTrains = parseTrains(upRes);
+    const downTrains = parseTrains(downRes);
+
+    let html = '';
+
+    // 상행
+    html += `<div class="tr-section-title" style="background:#185FA5">↑ 상행 · ${st.upName} 방향</div>`;
+    if (upTrains.length === 0) {
+      html += `<div style="padding:12px 14px;font-size:12px;color:#aaa">오늘 운행 정보 없음</div>`;
+    } else {
+      const nextUpIdx = upTrains.findIndex(t => t.timeMin >= nowMin);
+      upTrains.forEach((t, i) => {
+        const isPast = t.timeMin < nowMin;
+        const isNext = i === nextUpIdx;
+        html += `<div class="tr-row ${isPast?'past':''} ${isNext?'next':''}">
+          <div class="tr-time ${isPast?'past':''} ${isNext?'next':''}">${t.time}</div>
+          <div><div class="tr-dest">${st.upName} 도착 ${t.arr}</div><div class="tr-via">열차 ${t.no}</div></div>
+          <div class="tr-grade">${t.grade}</div>
+        </div>`;
+      });
+    }
+
+    // 하행
+    html += `<div class="tr-section-title" style="background:#E24B4A;margin-top:8px">↓ 하행 · ${st.downName} 방향</div>`;
+    if (downTrains.length === 0) {
+      html += `<div style="padding:12px 14px;font-size:12px;color:#aaa">오늘 운행 정보 없음</div>`;
+    } else {
+      const nextDownIdx = downTrains.findIndex(t => t.timeMin >= nowMin);
+      downTrains.forEach((t, i) => {
+        const isPast = t.timeMin < nowMin;
+        const isNext = i === nextDownIdx;
+        html += `<div class="tr-row ${isPast?'past':''} ${isNext?'next':''}">
+          <div class="tr-time ${isPast?'past':''} ${isNext?'next':''}">${t.time}</div>
+          <div><div class="tr-dest">${st.downName} 도착 ${t.arr}</div><div class="tr-via">열차 ${t.no}</div></div>
+          <div class="tr-grade">${t.grade}</div>
+        </div>`;
+      });
+    }
+
+    html += `<div style="padding:8px 14px;font-size:10px;color:#ccc">코레일 API 실시간 데이터</div>`;
+    body.innerHTML = html;
+
+  } catch(e) {
+    body.innerHTML = `<div style="padding:20px;text-align:center;color:#aaa;font-size:13px">시간표를 불러오지 못했어요</div>`;
+  }
+}
+
+function renderTerminalTimetable(body, terminalName, data) {
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
 
-  const grid = document.getElementById('hub-grid');
-  const hint = grid.nextElementSibling;
-  const detail = document.getElementById('hub-detail');
+  let html = '';
+  data.forEach(route => {
+    html += `<div class="tr-section-title" style="background:#EF9F27">
+      🚌 ${route.dest} <span style="font-weight:400;font-size:11px">${route.via ? '(경유: '+route.via+')' : ''}</span>
+    </div>`;
 
-  grid.style.display = 'none';
-  if (hint) hint.style.display = 'none';
-  detail.style.display = 'block';
-  // 뒤로가기를 위해 transport 항목 하나 더 쌓기
-  history.pushState({ screen: 'transport' }, '', '');
+    if (route.times.length === 0) {
+      html += `<div style="padding:10px 14px;font-size:12px;color:#aaa">서천 출발 약 20분 후</div>`;
+      return;
+    }
 
-  let html = `<div class="hub-detail-back" onclick="closeHubDetail()">
-    <span class="hub-detail-back-btn">‹</span>
-    <div>
-      <div class="hub-detail-title">${hub.name}</div>
-      <div class="hub-detail-sub">오늘 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} 기준 · 지난 시간 제외</div>
-    </div>
-  </div>`;
-
-  // 기차: 상행/하행 탭으로 렌더링
-  if (hub.direction && hub.upward && hub.downward) {
-    html += `
-    <div style="display:flex;gap:0;margin:0 0 12px;border-bottom:2px solid #eee">
-      <button id="dir-up-btn" onclick="switchDirection('up','${hub.id}')"
-        style="flex:1;padding:10px;border:none;background:none;font-size:13px;font-weight:700;color:#1D9E75;border-bottom:2px solid #1D9E75;margin-bottom:-2px;cursor:pointer">
-        ↑ 상행 (서울·대전 방면)
-      </button>
-      <button id="dir-down-btn" onclick="switchDirection('down','${hub.id}')"
-        style="flex:1;padding:10px;border:none;background:none;font-size:13px;font-weight:500;color:#999;cursor:pointer">
-        ↓ 하행 (익산·군산 방면)
-      </button>
-    </div>
-    <div id="dir-up">`;
-    hub.upward.forEach((dest, di) => {
-      html += renderDestSection(dest, di, nowMin);
+    const nextIdx = route.times.findIndex(t => {
+      const [h,m] = t.split(':').map(Number);
+      return h*60+m >= nowMin;
     });
-    html += `</div>
-    <div id="dir-down" style="display:none">`;
-    hub.downward.forEach((dest, di) => {
-      html += renderDestSection(dest, di, nowMin);
+
+    route.times.forEach((t, i) => {
+      const [h,m] = t.split(':').map(Number);
+      const tMin = h*60+m;
+      const isPast = tMin < nowMin;
+      const isNext = i === nextIdx;
+      html += `<div class="tr-row ${isPast?'past':''} ${isNext?'next':''}">
+        <div class="tr-time ${isPast?'past':''} ${isNext?'next':''}">${t}</div>
+        <div><div class="tr-dest">${route.dest}</div><div class="tr-via">${route.via||''}</div></div>
+        <div class="tr-grade">시외</div>
+      </div>`;
     });
-    html += `</div>`;
-  } else {
-    hub.destinations.forEach((dest, di) => {
-      html += renderDestSection(dest, di, nowMin);
-    });
-  }
-
-  html += `<a class="book-link" href="${hub.bookUrl}" target="_blank">
-    <span class="book-link-text">${hub.bookLabel}</span>
-    <span class="book-link-arr">→</span>
-  </a>
-  <div style="font-size:11px;color:#aaa;text-align:center;padding:10px 0 4px">※ 시간표는 참고용이며 실제와 다를 수 있습니다. 예매 전 반드시 확인하세요.</div>
-  <div style="height:16px"></div>`;
-
-  detail.innerHTML = html;
-}
-
-function renderDestSection(dest, di, nowMin) {
-  const remainTimes = dest.times.filter(t => {
-    const [th, tm] = t.split(':').map(Number);
-    return th * 60 + tm >= nowMin;
   });
-  let html = `<div class="dest-section ${di === 0 ? 'featured' : ''}">`;
-  if (di === 0) {
-    html += `<div class="dest-header"><span class="dest-name">${dest.name}</span><span class="dest-duration">${dest.duration}</span></div>`;
-  } else {
-    html += `<div class="dest-header-plain"><span class="dest-name-plain">${dest.name}</span><span class="dest-duration" style="font-size:10px;color:#888">${dest.duration}</span></div>`;
-  }
-  html += `<div class="dest-body"><div class="dest-times">`;
-  if (remainTimes.length === 0) {
-    html += `<span class="dest-time" style="color:#ccc">오늘 운행 종료</span>`;
-  } else {
-    remainTimes.forEach((t, ti) => {
-      const isLast = t === dest.times[dest.times.length - 1];
-      html += `<span class="dest-time ${ti === 0 ? 'next' : ''} ${isLast ? 'last' : ''}">${t}${ti === 0 ? ' 출발' : ''}${isLast ? ' 막차' : ''}</span>`;
-    });
-  }
-  html += `</div>`;
-  if (di === 0 && dest.lastReturn) {
-    html += `<div class="return-box"><div class="return-box-label">복귀 막차</div><div class="return-box-value">${dest.lastReturn}</div></div>`;
-  }
-  html += `</div></div>`;
-  return html;
+
+  html += `<div style="padding:8px 14px;font-size:10px;color:#ccc">※ 실제 시간표와 다를 수 있습니다</div>`;
+  body.innerHTML = html;
 }
 
-function switchDirection(dir, hubId) {
-  document.getElementById('dir-up').style.display = dir === 'up' ? 'block' : 'none';
-  document.getElementById('dir-down').style.display = dir === 'down' ? 'block' : 'none';
-  document.getElementById('dir-up-btn').style.color = dir === 'up' ? '#1D9E75' : '#999';
-  document.getElementById('dir-up-btn').style.borderBottom = dir === 'up' ? '2px solid #1D9E75' : 'none';
-  document.getElementById('dir-down-btn').style.color = dir === 'down' ? '#1D9E75' : '#999';
-  document.getElementById('dir-down-btn').style.borderBottom = dir === 'down' ? '2px solid #1D9E75' : 'none';
-}
-
-function transportBack() {
-  const detail = document.getElementById('hub-detail');
-  if (detail && detail.style.display !== 'none') {
-    // 폰 뒤로가기와 동일하게 history.back() 호출 → popstate에서 처리
-    history.back();
-  } else {
-    showScreen('home');
-  }
-}
-
-function closeHubDetail() {
-  const grid = document.getElementById('hub-grid');
-  const hint = grid?.nextElementSibling;
-  const detail = document.getElementById('hub-detail');
-  if (grid) grid.style.display = 'grid';
-  if (hint) hint.style.display = 'block';
-  if (detail) { detail.style.display = 'none'; detail.innerHTML = ''; }
-}
-
-// ==================== 정류장 시간표 ====================
+// ==================== 정류장 시간표 ====================// ==================== 정류장 시간표 ====================
 
 function onStopSearchInput(val) {
   const resultsEl = document.getElementById('stop-search-results');

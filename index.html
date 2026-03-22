@@ -157,14 +157,22 @@
   <!-- ==================== 고속·기차 화면 ==================== -->
   <div id="screen-transport" class="screen">
     <div class="page-header green">
-      <button class="back-btn" onclick="transportBack()">‹</button>
+      <button class="back-btn" onclick="showScreen('home')">‹</button>
       <div>
         <div class="page-title">시외(고속)버스 · 기차</div>
-        <div class="page-sub">터미널·역 선택</div>
+        <div class="page-sub" id="transport-sub">터미널 · 역 선택</div>
       </div>
     </div>
-    <div class="hub-grid" id="hub-grid"></div>
-    <div class="hub-detail" id="hub-detail" style="display:none"></div>
+    <!-- 상단 탭 -->
+    <div id="transport-tabs" style="display:flex;overflow-x:auto;background:#fff;border-bottom:1.5px solid #eee;padding:0 8px;gap:4px;flex-shrink:0">
+      <button class="tr-tab active" onclick="showTransportTab('pangyoStation')" id="tr-tab-pangyoStation">판교역</button>
+      <button class="tr-tab" onclick="showTransportTab('seocheonStation')" id="tr-tab-seocheonStation">서천역</button>
+      <button class="tr-tab" onclick="showTransportTab('janghangStation')" id="tr-tab-janghangStation">장항역</button>
+      <button class="tr-tab" onclick="showTransportTab('seocheonTerminal')" id="tr-tab-seocheonTerminal">서천터미널</button>
+      <button class="tr-tab" onclick="showTransportTab('janghangTerminal')" id="tr-tab-janghangTerminal">장항터미널</button>
+    </div>
+    <!-- 시간표 본문 -->
+    <div id="transport-body" style="flex:1;overflow-y:auto;padding-bottom:12px"></div>
   </div>
 
   <!-- ==================== 즐겨찾기 화면 ==================== -->

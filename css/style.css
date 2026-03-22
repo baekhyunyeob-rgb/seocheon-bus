@@ -853,3 +853,45 @@ html, body {
 
 /* ===== 유틸 ===== */
 .divider { height: 0.5px; background: #f0f0f0; margin: 4px 0; }
+
+/* ==================== 시외버스·기차 탭 ==================== */
+.tr-tab {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: #aaa;
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  font-family: inherit;
+  transition: color .15s, border-color .15s;
+}
+.tr-tab.active {
+  color: #1D9E75;
+  border-bottom-color: #1D9E75;
+}
+.tr-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  padding: 6px 14px;
+  margin: 0;
+}
+.tr-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 60px;
+  padding: 7px 14px;
+  border-bottom: .5px solid #f0f0f0;
+  align-items: center;
+  font-size: 13px;
+}
+.tr-row.past { opacity: 0.35; }
+.tr-row.next { background: #FFF8E1; }
+.tr-time { font-weight: 700; color: #185FA5; }
+.tr-time.past { text-decoration: line-through; color: #bbb; }
+.tr-time.next { color: #E24B4A; }
+.tr-dest { font-size: 12px; color: #444; }
+.tr-via { font-size: 10px; color: #aaa; }
+.tr-grade { font-size: 10px; color: #888; text-align: right; }
