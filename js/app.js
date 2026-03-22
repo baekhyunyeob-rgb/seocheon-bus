@@ -90,10 +90,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadKakaoMap();
 
   // 초기 history 상태 설정
+  // PWA standalone 모드 대응: stack에 최소 2개 유지해야 popstate 발생
   history.replaceState({ screen: 'home' }, '', '');
+  history.pushState({ screen: 'home_guard' }, '', '');
 
   // 폰 뒤로가기 - 각 화면의 ‹ 버튼과 동일한 로직
   window.addEventListener('popstate', (e) => {
+    console.log('[뒤로가기] popstate 발생 / currentScreen:', currentScreen, '/ e.state:', JSON.stringify(e.state));
     switch (currentScreen) {
       case 'detail':
         // detail 화면엔 back-btn 없음 → result로
@@ -2484,7 +2487,7 @@ function renderTrainGrid(body, cols, stName) {
       const trains = col.trains.filter(t => Math.floor(t.depMin/60) === h);
       const nowNextIdx = col.trains.findIndex(tr => tr.depMin >= nowMin);
 
-      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:3px;padding:3px 4px;align-items:center;justify-content:flex-start">`;
+      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:3px;padding:3px 4px;align-items:center;justify-content:center">`;
       trains.forEach(t => {
         const isPast = t.depMin < nowMin;
         const isNext = col.trains[nowNextIdx] === t;
@@ -2593,7 +2596,7 @@ function renderGridTimetable(body, data, type, terminalName) {
       const items = times.filter(t => Math.floor(t.depMin/60) === h);
       const nextMin = times.find(t => t.depMin >= nowMin)?.depMin;
 
-      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:3px;padding:3px 4px;align-items:center;justify-content:flex-start">`;
+      html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:3px;padding:3px 4px;align-items:center;justify-content:center">`;
       items.forEach(t => {
         const isPast = t.depMin < nowMin;
         const isNext = t.depMin === nextMin;
