@@ -2334,18 +2334,21 @@ const TRAIN_STATIONS = {
 
 // 터미널 시간표 데이터
 const SEOCHEON_TERMINAL_DATA = [
-  { dest:'서울', via:'직통(남부)',      times:['07:40','09:20','11:00','12:40','14:20','16:00','17:40','19:10'], grade:'시외' },
-  { dest:'대전', via:'부여·논산(복합)', times:['07:05','08:35','10:25','12:15','13:55','15:45','17:25','19:15'], grade:'시외' },
-  { dest:'세종', via:'부여·공주',       times:['08:15','12:50','16:35'], grade:'시외' },
-  { dest:'천안', via:'홍성·예산',       times:['09:10','13:20','17:50'], grade:'시외' },
-  { dest:'군산', via:'장항경유',        times:['07:25','08:25','09:25','10:25','11:25','12:25','13:25','14:25','15:25','16:25','17:25','18:25'], grade:'시외' },
-  { dest:'익산', via:'군산경유',        times:['08:50','11:15','14:30','17:55'], grade:'시외' },
+  { dest:'서울', via:'직통',           times:['07:40','09:20','11:00','12:40','14:20','16:00','17:40','19:10'], grade:'시외' },
+  { dest:'대전', via:'부여·논산 경유', times:['07:05','08:35','10:25','12:15','13:55','15:45','17:25','19:15'], grade:'시외' },
+  { dest:'세종', via:'부여·공주 경유', times:['08:15','12:50','16:35'], grade:'시외' },
+  { dest:'천안', via:'홍성·예산 경유', times:['09:10','13:20','17:50'], grade:'시외' },
+  { dest:'군산', via:'장항 경유',      times:['07:25','08:25','09:25','10:25','11:25','12:25','13:25','14:25','15:25','16:25','17:25','18:25'], grade:'시외' },
+  { dest:'익산', via:'군산 경유',      times:['08:50','11:15','14:30','17:55'], grade:'시외' },
 ];
 
 const JANGHANG_TERMINAL_DATA = [
-  { dest:'서울', via:'서천경유(남부)', times:['07:20','09:00','10:40','12:20','14:00','15:40','17:20','18:50'], grade:'시외' },
-  { dest:'대전', via:'서천경유(복합)', times:['06:45','08:15','10:05','11:55','13:35','15:25','17:05','18:55'], grade:'시외' },
-  { dest:'군산', via:'직통',           times:['07:45','08:45','09:45','10:45','11:45','12:45','13:45','14:45','15:45','16:45','17:45','18:45'], grade:'시외' },
+  { dest:'서울', via:'서천 경유',           times:['07:20','09:00','10:40','12:20','14:00','15:40','17:20','18:50'], grade:'시외' },
+  { dest:'대전', via:'서천 경유',           times:['06:45','08:15','10:05','11:55','13:35','15:25','17:05','18:55'], grade:'시외' },
+  { dest:'세종', via:'서천·부여·공주 경유', times:['08:35','13:10','16:55'], grade:'시외' },
+  { dest:'천안', via:'서천·홍성·예산 경유', times:['09:30','13:40','18:10'], grade:'시외' },
+  { dest:'군산', via:'직통',                times:['07:45','08:45','09:45','10:45','11:45','12:45','13:45','14:45','15:45','16:45','17:45','18:45'], grade:'시외' },
+  { dest:'익산', via:'서천·군산 경유',      times:['09:10','11:35','14:50','18:15'], grade:'시외' },
 ];
 
 // 예약 링크
@@ -2565,9 +2568,8 @@ function renderGridTimetable(body, data, type, terminalName) {
     return { dep: t, depMin: th*60+tm, dest: col.dest, via: col.via, grade: col.grade };
   }));
 
-  // 전체 고유 시간(분) 수집 후 정렬 - 각 열 독립적으로 행 결정
-  // 최대 행 수 = 가장 많은 열의 시간 수
-  const maxRows = Math.max(...colTimes.map(c => c.length));
+  // 전체 유니크 시간(분) 수집 후 정렬
+  const allMins = [...new Set(colTimes.flat().map(t => t.depMin))].sort((a,b) => a-b);
 
   const header = `
   <div style="position:sticky;top:0;z-index:10;background:#fff;border-bottom:1.5px solid #eee">
@@ -2581,28 +2583,21 @@ function renderGridTimetable(body, data, type, terminalName) {
   </div>`;
 
   let rows = '';
-  for (let r=0; r<maxRows; r++) {
-    // 이 행에 표시할 각 열의 시간
-    const rowItems = colTimes.map(times => times[r] || null);
-    // 행에 하나라도 있으면 렌더
-    if (rowItems.every(t => !t)) continue;
+  let lastHour = -1;
 
-    // 시간 라벨: 이 행의 가장 이른 시간의 시(hour)
-    const firstTime = rowItems.find(t => t);
-    const hLabel = firstTime ? String(Math.floor(firstTime.depMin/60)).padStart(2,'0') : '';
-
-    // 이전 행과 같은 시간대면 라벨 숨김
-    const prevItems = r > 0 ? colTimes.map(times => times[r-1] || null) : [];
-    const prevFirst = prevItems.find(t => t);
-    const showLabel = !prevFirst || Math.floor(prevFirst.depMin/60) !== Math.floor(firstTime.depMin/60);
+  allMins.forEach(min => {
+    const h = Math.floor(min/60);
+    const showLabel = h !== lastHour;
+    if (showLabel) lastHour = h;
 
     rows += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:34px;align-items:center">`;
-    rows += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb">${showLabel ? hLabel : ''}</div>`;
+    rows += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb">${showLabel ? String(h).padStart(2,'0') : ''}</div>`;
 
-    rowItems.forEach((t, ci) => {
+    colTimes.forEach((times, ci) => {
+      const t = times.find(x => x.depMin === min) || null;
       if (!t) { rows += `<div style="flex:1"></div>`; return; }
       const isPast = t.depMin < nowMin;
-      const nextMin = colTimes[ci].find(x => x.depMin >= nowMin)?.depMin;
+      const nextMin = times.find(x => x.depMin >= nowMin)?.depMin;
       const isNext  = t.depMin === nextMin;
       const bg = isNext ? '#FFF8E1' : '';
       const timeColor = isPast ? '#ccc' : isNext ? '#E24B4A' : colColors[ci%colColors.length];
@@ -2613,7 +2608,7 @@ function renderGridTimetable(body, data, type, terminalName) {
         </div>`;
     });
     rows += `</div>`;
-  }
+  });
 
   let html = header + rows;
 
