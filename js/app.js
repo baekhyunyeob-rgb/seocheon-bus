@@ -96,6 +96,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('popstate', (e) => {
     const screen = e.state?.screen || 'home';
 
+    // 경로 상세 화면에서 뒤로가기 → 결과 화면
+    if (currentScreen === 'detail') {
+      showScreenNoHistory('result');
+      history.pushState({ screen: 'result' }, '', '');
+      return;
+    }
+
+    // 시외버스·기차 상세 열려있으면 닫기
     if (screen === 'transport') {
       const detail = document.getElementById('hub-detail');
       if (detail && detail.style.display !== 'none') {
@@ -103,19 +111,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         history.pushState({ screen: 'transport' }, '', '');
         return;
       }
-      showScreenNoHistory('home');
-      history.replaceState({ screen: 'home' }, '', '');
-      return;
     }
 
-    if (screen === 'home') {
-      if (currentScreen !== 'home') {
-        showScreenNoHistory('home');
-        history.replaceState({ screen: 'home' }, '', '');
-      }
-    } else {
-      showScreenNoHistory(screen);
-    }
+    // 그 외 모든 화면 → 홈으로
+    showScreenNoHistory('home');
+    history.replaceState({ screen: 'home' }, '', '');
   });
 });
 
@@ -2233,13 +2233,17 @@ function closeRouteDetail() {
 function initRoutesMap() {
   const container = document.getElementById('map-routes');
   if (!container) return;
-  // 카카오맵 SDK 준비 확인
   if (typeof kakao === 'undefined' || !kakao.maps) {
     setTimeout(initRoutesMap, 300);
     return;
   }
+  // ROUTE_COORDS 아직 미준비면 대기
+  if (ROUTE_COORDS.size === 0) {
+    setTimeout(initRoutesMap, 300);
+    return;
+  }
   kakao.maps.load(() => {
-    if (mapRoutes) return; // 이미 초기화됨
+    if (mapRoutes) return;
     mapRoutes = new kakao.maps.Map(container, {
       center: new kakao.maps.LatLng(36.0758, 126.6908),
       level: 10
@@ -2309,6 +2313,10 @@ function showRouteOnMap(route) {
     const bounds = new kakao.maps.LatLngBounds();
     allCoords.forEach(c => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
     mapRoutes.setBounds(bounds, 40);
+  } else {
+    // 좌표 없으면 서천 중심으로 유지
+    mapRoutes.setCenter(new kakao.maps.LatLng(36.0758, 126.6908));
+    mapRoutes.setLevel(10);
   }
 }
 
