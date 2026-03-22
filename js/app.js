@@ -2398,7 +2398,7 @@ async function fetchAndRenderTrain(body, st) {
           no:    t.trainno,
           arrName: col.arrName,
           label: col.label
-        })).sort((a,b) => a.depMin - b.depMin);
+        })).filter(t => t.depMin <= 23*60+59).sort((a,b) => a.depMin - b.depMin);
       });
       _trainCache[cacheKey] = colData;
     }
@@ -2443,11 +2443,11 @@ function renderTrainGrid(body, cols, stName) {
 
   let html = `
   <div style="position:sticky;top:0;z-index:10;background:#fff;border-bottom:1.5px solid #eee">
-    <div style="display:grid;grid-template-columns:44px ${cols.map(()=>colW).join(' ')};font-size:11px;font-weight:700">
-      <div style="padding:8px 4px;color:#aaa;text-align:center">시간</div>
+    <div style="display:flex">
+      <div style="width:36px;flex-shrink:0"></div>
       ${cols.map((col,i) => `
-        <div style="padding:8px 4px;text-align:center;color:${colColor[i]||'#555'}">
-          ${col.label}<br><span style="font-size:10px;font-weight:400">${col.arrName}행</span>
+        <div style="flex:1;padding:7px 4px;text-align:center;color:${colColor[i]||'#555'};font-size:12px;font-weight:700">
+          ${col.label} <span style="font-weight:400;font-size:11px">${col.arrName}행</span>
         </div>`).join('')}
     </div>
   </div>`;
@@ -2465,13 +2465,13 @@ function renderTrainGrid(body, cols, stName) {
     const maxRows   = Math.max(...rowTrains.map(t => t.length), 1);
 
     for (let r=0; r<maxRows; r++) {
-      html += `<div style="display:grid;grid-template-columns:44px ${cols.map(()=>colW).join(' ')};border-bottom:.5px solid #f0f0f0;min-height:36px;align-items:center">`;
+      html += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:32px;align-items:center">`;
       // 시간 라벨 (첫 행만)
-      html += `<div style="text-align:center;font-size:12px;font-weight:700;color:#aaa;padding:4px 2px">${r===0 ? String(h).padStart(2,'0') : ''}</div>`;
+      html += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb">${r===0 ? String(h).padStart(2,'0') : ''}</div>`;
 
       cols.forEach((col, ci) => {
         const t = rowTrains[ci][r];
-        if (!t) { html += `<div></div>`; return; }
+        if (!t) { html += `<div style="flex:1"></div>`; return; }
         const isPast = t.depMin < nowMin;
         const nowNextIdx = col.trains.findIndex(tr => tr.depMin >= nowMin);
         const isNext = col.trains[nowNextIdx] === t;
@@ -2479,9 +2479,9 @@ function renderTrainGrid(body, cols, stName) {
         const timeColor = isPast ? '#ccc' : isNext ? '#E24B4A' : colColor[ci];
         html += `
           <div onclick="showTrainDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
-            style="padding:5px 6px;cursor:pointer;background:${bg};border-radius:6px;margin:2px">
+            style="flex:1;padding:4px;cursor:pointer;background:${bg};border-radius:6px;margin:1px;text-align:center">
             <div style="font-size:13px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''}">${t.dep}</div>
-            <div style="font-size:9px;color:#aaa">${t.grade.replace('호','')}</div>
+            <div style="font-size:9px;color:#aaa;margin-top:1px">${t.grade.replace('호','')}</div>
           </div>`;
       });
       html += `</div>`;
@@ -2578,12 +2578,12 @@ function renderGridTimetable(body, data, type, terminalName) {
   const colColors = ['#EF9F27','#1D9E75','#7F77DD','#185FA5','#E24B4A','#3B6D11'];
 
   let html = `
-  <div style="position:sticky;top:0;z-index:10;background:#fff;border-bottom:1.5px solid #eee;overflow-x:auto">
-    <div style="display:grid;grid-template-columns:44px ${cols.map(()=>colW).join(' ')};font-size:10px;font-weight:700;min-width:300px">
-      <div style="padding:6px 4px;color:#aaa;text-align:center">시간</div>
+  <div style="position:sticky;top:0;z-index:10;background:#fff;border-bottom:1.5px solid #eee">
+    <div style="display:flex">
+      <div style="width:36px;flex-shrink:0"></div>
       ${cols.map((col,i) => `
-        <div style="padding:6px 4px;text-align:center;color:${colColors[i%colColors.length]}">
-          ${col.dest}<br><span style="font-size:9px;font-weight:400;color:#aaa">${col.via||''}</span>
+        <div style="flex:1;padding:6px 3px;text-align:center;color:${colColors[i%colColors.length]};font-size:11px;font-weight:700">
+          ${col.dest} <span style="font-size:9px;font-weight:400;color:#aaa">${col.via||''}</span>
         </div>`).join('')}
     </div>
   </div>`;
@@ -2600,12 +2600,12 @@ function renderGridTimetable(body, data, type, terminalName) {
     const maxRows  = Math.max(...rowData.map(d => d.length), 1);
 
     for (let r=0; r<maxRows; r++) {
-      html += `<div style="display:grid;grid-template-columns:44px ${cols.map(()=>colW).join(' ')};border-bottom:.5px solid #f0f0f0;min-height:36px;align-items:center;min-width:300px">`;
-      html += `<div style="text-align:center;font-size:12px;font-weight:700;color:#aaa;padding:4px 2px">${r===0 ? String(h).padStart(2,'0') : ''}</div>`;
+      html += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:32px;align-items:center">`;
+      html += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb">${r===0 ? String(h).padStart(2,'0') : ''}</div>`;
 
       cols.forEach((col, ci) => {
         const t = rowData[ci][r];
-        if (!t) { html += `<div></div>`; return; }
+        if (!t) { html += `<div style="flex:1"></div>`; return; }
         const isPast = t.depMin < nowMin;
         const allTimes = col.times.map(ts => { const [th,tm]=ts.split(':').map(Number); return th*60+tm; });
         const nextMin  = allTimes.find(m => m >= nowMin);
@@ -2614,7 +2614,7 @@ function renderGridTimetable(body, data, type, terminalName) {
         const timeColor = isPast ? '#ccc' : isNext ? '#E24B4A' : colColors[ci%colColors.length];
         html += `
           <div onclick="showBusDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
-            style="padding:5px 4px;cursor:pointer;background:${bg};border-radius:6px;margin:2px;text-align:center">
+            style="flex:1;padding:4px 3px;cursor:pointer;background:${bg};border-radius:6px;margin:1px;text-align:center">
             <div style="font-size:13px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''}">${t.dep}</div>
           </div>`;
       });

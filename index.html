@@ -232,13 +232,21 @@
     </div>
     <div class="tab" id="tab-transport" onclick="showScreen('transport')">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <rect x="1" y="8" width="22" height="10" rx="2.5" fill="#7F77DD" opacity="0.12" stroke="#7F77DD" stroke-width="1.6"/>
-        <path d="M1 12h22" stroke="#7F77DD" stroke-width="1.2"/>
-        <circle cx="5" cy="17.5" r="1.8" fill="#7F77DD"/>
-        <circle cx="19" cy="17.5" r="1.8" fill="#7F77DD"/>
-        <path d="M7 8V6M11 8V4.5M15 8V6M19 8V5" stroke="#7F77DD" stroke-width="1.4" stroke-linecap="round"/>
+        <!-- 기차 몸통 -->
+        <rect x="3" y="5" width="18" height="11" rx="2" fill="#7F77DD" opacity="0.12" stroke="#7F77DD" stroke-width="1.6"/>
+        <!-- 창문 -->
+        <rect x="6" y="8" width="4" height="3" rx=".8" fill="#7F77DD" opacity="0.5"/>
+        <rect x="14" y="8" width="4" height="3" rx=".8" fill="#7F77DD" opacity="0.5"/>
+        <!-- 선로 연결 -->
+        <path d="M7 16v2M17 16v2" stroke="#7F77DD" stroke-width="1.4" stroke-linecap="round"/>
+        <!-- 바퀴 -->
+        <circle cx="7" cy="18.5" r="1.6" fill="#7F77DD"/>
+        <circle cx="17" cy="18.5" r="1.6" fill="#7F77DD"/>
+        <!-- 선로 -->
+        <path d="M2 21h20" stroke="#7F77DD" stroke-width="1.2" stroke-linecap="round"/>
+        <path d="M4 21v-1M8 21v-1M12 21v-1M16 21v-1M20 21v-1" stroke="#7F77DD" stroke-width="1" stroke-linecap="round"/>
       </svg>
-      <span>시외버스·기차</span>
+      <span>시외·기차</span>
     </div>
     <div class="tab" id="tab-favorites" onclick="showScreen('favorites')">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
