@@ -92,30 +92,43 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 초기 history 상태 설정
   history.replaceState({ screen: 'home' }, '', '');
 
-  // 폰 뒤로가기 처리
+  // 폰 뒤로가기 - 각 화면의 ‹ 버튼과 동일한 로직
   window.addEventListener('popstate', (e) => {
-    const screen = e.state?.screen || 'home';
-
-    // 경로 상세 화면에서 뒤로가기 → 결과 화면
-    if (currentScreen === 'detail') {
-      showScreenNoHistory('result');
-      history.pushState({ screen: 'result' }, '', '');
-      return;
+    switch (currentScreen) {
+      case 'detail':
+        // detail 화면엔 back-btn 없음 → result로
+        showScreenNoHistory('result');
+        history.pushState({ screen: 'result' }, '', '');
+        break;
+      case 'routes':
+        // routes 화면 ‹ = routesBack()
+        if (_timetableReturnScreen) {
+          const target = _timetableReturnScreen;
+          _timetableReturnScreen = null;
+          showScreenNoHistory(target);
+          history.pushState({ screen: target }, '', '');
+        } else {
+          showScreenNoHistory('home');
+          history.replaceState({ screen: 'home' }, '', '');
+        }
+        break;
+      case 'transport':
+        // transport 상세 열려있으면 닫기, 아니면 홈
+        const detail = document.getElementById('hub-detail');
+        if (detail && detail.style.display !== 'none') {
+          closeHubDetail();
+          history.pushState({ screen: 'transport' }, '', '');
+        } else {
+          showScreenNoHistory('home');
+          history.replaceState({ screen: 'home' }, '', '');
+        }
+        break;
+      default:
+        // result, timetable, favorites 등 → 홈
+        showScreenNoHistory('home');
+        history.replaceState({ screen: 'home' }, '', '');
+        break;
     }
-
-    // 시외버스·기차 상세 열려있으면 닫기
-    if (screen === 'transport') {
-      const detail = document.getElementById('hub-detail');
-      if (detail && detail.style.display !== 'none') {
-        closeHubDetail();
-        history.pushState({ screen: 'transport' }, '', '');
-        return;
-      }
-    }
-
-    // 그 외 모든 화면 → 홈으로
-    showScreenNoHistory('home');
-    history.replaceState({ screen: 'home' }, '', '');
   });
 });
 
