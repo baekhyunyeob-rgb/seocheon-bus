@@ -2322,18 +2322,18 @@ const TRAIN_STATIONS = {
 
 // 터미널 시간표 데이터
 const SEOCHEON_TERMINAL_DATA = [
-  { dest:'서울(남부)', via:'직통',      times:['07:40','09:20','11:00','12:40','14:20','16:00','17:40','19:10'], grade:'시외' },
-  { dest:'대전(복합)', via:'부여·논산', times:['07:05','08:35','10:25','12:15','13:55','15:45','17:25','19:15'], grade:'시외' },
-  { dest:'세종',       via:'부여·공주', times:['08:15','12:50','16:35'], grade:'시외' },
-  { dest:'천안',       via:'홍성·예산', times:['09:10','13:20','17:50'], grade:'시외' },
-  { dest:'군산',       via:'장항경유',  times:['07:25','08:25','09:25','10:25','11:25','12:25','13:25','14:25','15:25','16:25','17:25','18:25'], grade:'시외' },
-  { dest:'익산',       via:'군산경유',  times:['08:50','11:15','14:30','17:55'], grade:'시외' },
+  { dest:'서울', via:'직통(남부)',      times:['07:40','09:20','11:00','12:40','14:20','16:00','17:40','19:10'], grade:'시외' },
+  { dest:'대전', via:'부여·논산(복합)', times:['07:05','08:35','10:25','12:15','13:55','15:45','17:25','19:15'], grade:'시외' },
+  { dest:'세종', via:'부여·공주',       times:['08:15','12:50','16:35'], grade:'시외' },
+  { dest:'천안', via:'홍성·예산',       times:['09:10','13:20','17:50'], grade:'시외' },
+  { dest:'군산', via:'장항경유',        times:['07:25','08:25','09:25','10:25','11:25','12:25','13:25','14:25','15:25','16:25','17:25','18:25'], grade:'시외' },
+  { dest:'익산', via:'군산경유',        times:['08:50','11:15','14:30','17:55'], grade:'시외' },
 ];
 
 const JANGHANG_TERMINAL_DATA = [
-  { dest:'서울(남부)', via:'서천경유', times:['07:20','09:00','10:40','12:20','14:00','15:40','17:20','18:50'], grade:'시외' },
-  { dest:'대전(복합)', via:'서천경유', times:['06:45','08:15','10:05','11:55','13:35','15:25','17:05','18:55'], grade:'시외' },
-  { dest:'군산',       via:'직통',     times:['07:45','08:45','09:45','10:45','11:45','12:45','13:45','14:45','15:45','16:45','17:45','18:45'], grade:'시외', note:'서천 출발 약 20분 후' },
+  { dest:'서울', via:'서천경유(남부)', times:['07:20','09:00','10:40','12:20','14:00','15:40','17:20','18:50'], grade:'시외' },
+  { dest:'대전', via:'서천경유(복합)', times:['06:45','08:15','10:05','11:55','13:35','15:25','17:05','18:55'], grade:'시외' },
+  { dest:'군산', via:'직통',           times:['07:45','08:45','09:45','10:45','11:45','12:45','13:45','14:45','15:45','16:45','17:45','18:45'], grade:'시외' },
 ];
 
 // 예약 링크
@@ -2453,14 +2453,7 @@ function renderTrainGrid(body, cols, stName) {
   </div>`;
 
   // 오전/오후 구분 헤더 추가하며 행 렌더링
-  let lastPeriod = '';
   hours.forEach(h => {
-    const period = h < 12 ? '오전' : '오후';
-    if (period !== lastPeriod) {
-      lastPeriod = period;
-      html += `<div style="background:#f5f5f5;padding:4px 10px;font-size:11px;font-weight:700;color:#888;border-bottom:.5px solid #e0e0e0">${period}</div>`;
-    }
-
     const rowTrains = cols.map((col,ci) => grid[h][ci] || []);
     const maxRows   = Math.max(...rowTrains.map(t => t.length), 1);
 
@@ -2480,7 +2473,7 @@ function renderTrainGrid(body, cols, stName) {
         html += `
           <div onclick="showTrainDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
             style="flex:1;padding:4px;cursor:pointer;background:${bg};border-radius:6px;margin:1px;text-align:center">
-            <div style="font-size:13px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''}">${t.dep}</div>
+            <div style="font-size:12px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''};white-space:nowrap">${t.dep}</div>
             <div style="font-size:9px;color:#aaa;margin-top:1px">${t.grade.replace('호','')}</div>
           </div>`;
       });
@@ -2551,85 +2544,78 @@ function renderGridTimetable(body, data, type, terminalName) {
   const now    = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
 
-  // 컬럼 = 각 목적지
   const cols = data.filter(d => d.times.length > 0);
-
-  // 전체 시간대 수집
-  const hourSet = new Set();
-  cols.forEach(col => col.times.forEach(t => {
-    const h = parseInt(t.split(':')[0]);
-    hourSet.add(h);
-  }));
-  const hours = [...hourSet].sort((a,b) => a-b);
-
-  // 격자 구성
-  const grid = {};
-  hours.forEach(h => {
-    grid[h] = {};
-    cols.forEach((col, ci) => {
-      grid[h][ci] = col.times.filter(t => parseInt(t.split(':')[0]) === h).map(t => {
-        const [th,tm] = t.split(':').map(Number);
-        return { dep: t, depMin: th*60+tm, dest: col.dest, via: col.via, grade: col.grade };
-      });
-    });
-  });
-
-  const colW = `${Math.floor(80/cols.length)}%`;
   const colColors = ['#EF9F27','#1D9E75','#7F77DD','#185FA5','#E24B4A','#3B6D11'];
 
-  let html = `
+  // 각 열의 시간을 분 단위로 변환
+  const colTimes = cols.map(col => col.times.map(t => {
+    const [th,tm] = t.split(':').map(Number);
+    return { dep: t, depMin: th*60+tm, dest: col.dest, via: col.via, grade: col.grade };
+  }));
+
+  // 전체 고유 시간(분) 수집 후 정렬 - 각 열 독립적으로 행 결정
+  // 최대 행 수 = 가장 많은 열의 시간 수
+  const maxRows = Math.max(...colTimes.map(c => c.length));
+
+  const header = `
   <div style="position:sticky;top:0;z-index:10;background:#fff;border-bottom:1.5px solid #eee">
     <div style="display:flex">
       <div style="width:36px;flex-shrink:0"></div>
       ${cols.map((col,i) => `
-        <div style="flex:1;padding:6px 3px;text-align:center;color:${colColors[i%colColors.length]};font-size:11px;font-weight:700">
-          ${col.dest} <span style="font-size:9px;font-weight:400;color:#aaa">${col.via||''}</span>
+        <div style="flex:1;padding:6px 2px;text-align:center;color:${colColors[i%colColors.length]};font-size:11px;font-weight:700">
+          ${col.dest}
         </div>`).join('')}
     </div>
   </div>`;
 
-  let lastPeriod = '';
-  hours.forEach(h => {
-    const period = h < 12 ? '오전' : '오후';
-    if (period !== lastPeriod) {
-      lastPeriod = period;
-      html += `<div style="background:#f5f5f5;padding:4px 10px;font-size:11px;font-weight:700;color:#888;border-bottom:.5px solid #e0e0e0">${period}</div>`;
-    }
+  let rows = '';
+  for (let r=0; r<maxRows; r++) {
+    // 이 행에 표시할 각 열의 시간
+    const rowItems = colTimes.map(times => times[r] || null);
+    // 행에 하나라도 있으면 렌더
+    if (rowItems.every(t => !t)) continue;
 
-    const rowData  = cols.map((col,ci) => grid[h][ci] || []);
-    const maxRows  = Math.max(...rowData.map(d => d.length), 1);
+    // 시간 라벨: 이 행의 가장 이른 시간의 시(hour)
+    const firstTime = rowItems.find(t => t);
+    const hLabel = firstTime ? String(Math.floor(firstTime.depMin/60)).padStart(2,'0') : '';
 
-    for (let r=0; r<maxRows; r++) {
-      html += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:32px;align-items:center">`;
-      html += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb">${r===0 ? String(h).padStart(2,'0') : ''}</div>`;
+    // 이전 행과 같은 시간대면 라벨 숨김
+    const prevItems = r > 0 ? colTimes.map(times => times[r-1] || null) : [];
+    const prevFirst = prevItems.find(t => t);
+    const showLabel = !prevFirst || Math.floor(prevFirst.depMin/60) !== Math.floor(firstTime.depMin/60);
 
-      cols.forEach((col, ci) => {
-        const t = rowData[ci][r];
-        if (!t) { html += `<div style="flex:1"></div>`; return; }
-        const isPast = t.depMin < nowMin;
-        const allTimes = col.times.map(ts => { const [th,tm]=ts.split(':').map(Number); return th*60+tm; });
-        const nextMin  = allTimes.find(m => m >= nowMin);
-        const isNext   = t.depMin === nextMin;
-        const bg = isNext ? '#FFF8E1' : '';
-        const timeColor = isPast ? '#ccc' : isNext ? '#E24B4A' : colColors[ci%colColors.length];
-        html += `
-          <div onclick="showBusDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
-            style="flex:1;padding:4px 3px;cursor:pointer;background:${bg};border-radius:6px;margin:1px;text-align:center">
-            <div style="font-size:13px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''}">${t.dep}</div>
-          </div>`;
-      });
-      html += `</div>`;
-    }
-  });
+    rows += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:34px;align-items:center">`;
+    rows += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb">${showLabel ? hLabel : ''}</div>`;
+
+    rowItems.forEach((t, ci) => {
+      if (!t) { rows += `<div style="flex:1"></div>`; return; }
+      const isPast = t.depMin < nowMin;
+      const nextMin = colTimes[ci].find(x => x.depMin >= nowMin)?.depMin;
+      const isNext  = t.depMin === nextMin;
+      const bg = isNext ? '#FFF8E1' : '';
+      const timeColor = isPast ? '#ccc' : isNext ? '#E24B4A' : colColors[ci%colColors.length];
+      rows += `
+        <div onclick="showBusDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
+          style="flex:1;padding:4px 2px;cursor:pointer;background:${bg};border-radius:6px;margin:1px;text-align:center">
+          <div style="font-size:12px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''};white-space:nowrap">${t.dep}</div>
+        </div>`;
+    });
+    rows += `</div>`;
+  }
+
+  let html = header + rows;
 
   // 예약 링크
-  html += `<div style="padding:14px;display:flex;gap:8px;border-top:1px solid #eee;margin-top:8px">
+  html += `<div style="padding:10px 14px;font-size:10px;color:#aaa;border-top:.5px solid #eee;line-height:1.8">
+    익산행은 군산을 경유합니다<br>
+    <span style="color:#ccc">※ 실제 시간표와 다를 수 있습니다</span>
+  </div>
+  <div style="padding:0 14px 14px">
     <a href="${BOOKING_LINKS.terminal.url}" target="_blank"
-      style="flex:1;background:#EF9F27;color:#fff;border-radius:10px;padding:10px;text-align:center;font-size:13px;font-weight:700;text-decoration:none">
+      style="display:block;background:#EF9F27;color:#fff;border-radius:10px;padding:10px;text-align:center;font-size:13px;font-weight:700;text-decoration:none">
       🚌 코버스 시외버스 예약
     </a>
-  </div>
-  <div style="padding:0 14px 16px;font-size:10px;color:#ccc">※ 실제 시간표와 다를 수 있습니다</div>`;
+  </div>`;
 
   body.innerHTML = html;
 }
