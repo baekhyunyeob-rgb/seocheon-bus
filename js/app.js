@@ -2467,33 +2467,36 @@ function renderTrainGrid(body, cols, stName) {
     </div>
   </div>`;
 
-  // 오전/오후 구분 헤더 추가하며 행 렌더링
+  // 시간대별 렌더링 - 같은 시간대 열차는 한 행에 묶어서 표시
   hours.forEach(h => {
     const rowTrains = cols.map((col,ci) => grid[h][ci] || []);
-    const maxRows   = Math.max(...rowTrains.map(t => t.length), 1);
+    // 한 행에 각 열의 모든 열차를 가로로 나열
+    html += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:36px;align-items:stretch">`;
+    html += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb;display:flex;align-items:center;justify-content:center">${String(h).padStart(2,'0')}</div>`;
 
-    for (let r=0; r<maxRows; r++) {
-      html += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:32px;align-items:center">`;
-      // 시간 라벨 (첫 행만)
-      html += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb">${r===0 ? String(h).padStart(2,'0') : ''}</div>`;
-
-      cols.forEach((col, ci) => {
-        const t = rowTrains[ci][r];
-        if (!t) { html += `<div style="flex:1"></div>`; return; }
-        const isPast = t.depMin < nowMin;
-        const nowNextIdx = col.trains.findIndex(tr => tr.depMin >= nowMin);
-        const isNext = col.trains[nowNextIdx] === t;
-        const bg = isNext ? '#FFF8E1' : '';
-        const timeColor = isPast ? '#ccc' : colColor[ci];
-        html += `
-          <div onclick="showTrainDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
-            style="flex:1;padding:4px;cursor:pointer;background:${bg};border-radius:6px;margin:1px;text-align:center">
-            <div style="font-size:12px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''};white-space:nowrap">${t.dep}</div>
-            <div style="font-size:9px;color:#aaa;margin-top:1px">${t.grade.replace('호','')}</div>
-          </div>`;
-      });
+    cols.forEach((col, ci) => {
+      const trains = rowTrains[ci];
+      const nowNextIdx = col.trains.findIndex(tr => tr.depMin >= nowMin);
+      html += `<div style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:3px 1px">`;
+      if (trains.length === 0) {
+        html += `<div style="flex:1"></div>`;
+      } else {
+        trains.forEach(t => {
+          const isPast = t.depMin < nowMin;
+          const isNext = col.trains[nowNextIdx] === t;
+          const bg = isNext ? '#FFF8E1' : '';
+          const timeColor = isPast ? '#ccc' : colColor[ci];
+          html += `
+            <div onclick="showTrainDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
+              style="flex:1;min-width:44px;padding:3px 2px;cursor:pointer;background:${bg};border-radius:5px;text-align:center">
+              <div style="font-size:12px;font-weight:700;color:${timeColor};${isPast?'text-decoration:line-through':''};white-space:nowrap">${t.dep}</div>
+              <div style="font-size:9px;color:#aaa">${t.grade.replace('호','')}</div>
+            </div>`;
+        });
+      }
       html += `</div>`;
-    }
+    });
+    html += `</div>`;
   });
 
   // 예약 링크
@@ -2562,14 +2565,14 @@ function renderGridTimetable(body, data, type, terminalName) {
   const cols = data.filter(d => d.times.length > 0);
   const colColors = ['#EF9F27','#1D9E75','#7F77DD','#185FA5','#E24B4A','#3B6D11'];
 
-  // 각 열의 시간을 분 단위로 변환
+  // 각 열의 시간을 분 단위로 변환 (열별 독립 배열)
   const colTimes = cols.map(col => col.times.map(t => {
     const [th,tm] = t.split(':').map(Number);
     return { dep: t, depMin: th*60+tm, dest: col.dest, via: col.via, grade: col.grade };
   }));
 
-  // 전체 유니크 시간(분) 수집 후 정렬
-  const allMins = [...new Set(colTimes.flat().map(t => t.depMin))].sort((a,b) => a-b);
+  // 행 수 = 가장 긴 열의 시간 수
+  const maxRows = Math.max(...colTimes.map(c => c.length));
 
   const header = `
   <div style="position:sticky;top:0;z-index:10;background:#fff;border-bottom:1.5px solid #eee">
@@ -2585,22 +2588,28 @@ function renderGridTimetable(body, data, type, terminalName) {
   let rows = '';
   let lastHour = -1;
 
-  allMins.forEach(min => {
-    const h = Math.floor(min/60);
+  for (let r = 0; r < maxRows; r++) {
+    // 이 행에 표시할 각 열의 시간
+    const rowItems = colTimes.map(times => times[r] || null);
+
+    // 이 행의 대표 시간 (첫 번째 존재하는 항목)
+    const firstItem = rowItems.find(t => t !== null);
+    if (!firstItem) continue;
+
+    const h = Math.floor(firstItem.depMin / 60);
     const showLabel = h !== lastHour;
     if (showLabel) lastHour = h;
 
     rows += `<div style="display:flex;border-bottom:.5px solid #f0f0f0;min-height:34px;align-items:center">`;
-    rows += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:#bbb">${showLabel ? String(h).padStart(2,'0') : ''}</div>`;
+    rows += `<div style="width:36px;flex-shrink:0;text-align:center;font-size:11px;font-weight:700;color:${showLabel ? '#555' : '#ddd'}">${String(h).padStart(2,'0')}</div>`;
 
-    colTimes.forEach((times, ci) => {
-      const t = times.find(x => x.depMin === min) || null;
+    rowItems.forEach((t, ci) => {
       if (!t) { rows += `<div style="flex:1"></div>`; return; }
-      const isPast = t.depMin < nowMin;
-      const nextMin = times.find(x => x.depMin >= nowMin)?.depMin;
-      const isNext  = t.depMin === nextMin;
-      const bg = isNext ? '#FFF8E1' : '';
-      const timeColor = isPast ? '#ccc' : isNext ? '#E24B4A' : colColors[ci%colColors.length];
+      const isPast  = t.depMin < nowMin;
+      const nextMin = colTimes[ci].find(x => x.depMin >= nowMin)?.depMin;
+      const isNext  = !isPast && t.depMin === nextMin;
+      const bg        = isNext ? '#FFF8E1' : '';
+      const timeColor = isPast ? '#ccc' : isNext ? '#E24B4A' : colColors[ci % colColors.length];
       rows += `
         <div onclick="showBusDetail(${JSON.stringify(t).replace(/"/g,'&quot;')})"
           style="flex:1;padding:4px 2px;cursor:pointer;background:${bg};border-radius:6px;margin:1px;text-align:center">
@@ -2608,7 +2617,7 @@ function renderGridTimetable(body, data, type, terminalName) {
         </div>`;
     });
     rows += `</div>`;
-  });
+  }
 
   let html = header + rows;
 
