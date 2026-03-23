@@ -52,6 +52,11 @@ html, body {
 }
 .screen.active { display: flex; }
 
+/* 홈화면은 스크롤 없이 지도+패널 꽉 채우기 */
+#screen-home {
+  overflow: hidden;
+}
+
 /* ===== 지도 ===== */
 .map-container {
   width: 100%;
@@ -979,3 +984,107 @@ html, body {
 .stop-search-item:hover { background: #f8f9fa; }
 .stop-search-icon { font-size: 14px; }
 .stop-search-empty { padding: 20px; text-align: center; color: #aaa; font-size: 13px; }
+
+/* ── 홈 검색 패널 (고정형) ── */
+.search-panel {
+  background: var(--white);
+  border-top: 1px solid var(--gray-border);
+  padding: 10px 14px 8px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+/* 교환 버튼 영역 */
+.loc-swap-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+.swap-btn {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #555;
+  flex-shrink: 0;
+  margin: 2px 0;
+}
+.swap-btn:active { background: #e0e0e0; }
+
+/* 인라인 텍스트 입력 */
+.loc-input-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--gray-bg);
+  border: 0.5px solid var(--gray-border);
+  border-radius: 8px;
+  padding: 0 10px;
+  gap: 6px;
+}
+.loc-input-text {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  padding: 8px 0;
+  outline: none;
+  font-family: inherit;
+  color: var(--text);
+}
+.loc-input-text::placeholder { color: #bbb; }
+
+/* 자동완성 드롭다운 */
+.home-autocomplete {
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 2px 0 4px 24px;
+  z-index: 100;
+}
+.home-ac-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 0.5px solid #f5f5f5;
+}
+.home-ac-item:last-child { border-bottom: none; }
+.home-ac-item:active { background: #f0f7f5; }
+.home-ac-icon { font-size: 12px; color: #aaa; flex-shrink: 0; }
+.home-ac-name { flex: 1; color: var(--text); }
+.home-ac-dist { font-size: 11px; color: #bbb; flex-shrink: 0; }
+
+/* 검색 하단 행 */
+.search-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.search-btn-sm {
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.search-btn-sm:active { opacity: 0.85; }
