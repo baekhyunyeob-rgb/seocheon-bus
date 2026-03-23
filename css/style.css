@@ -985,6 +985,8 @@ html, body {
 .stop-search-icon { font-size: 14px; }
 .stop-search-empty { padding: 20px; text-align: center; color: #aaa; font-size: 13px; }
 
+
+
 /* ── 홈 검색 패널 (고정형) ── */
 .search-panel {
   background: var(--white);
@@ -1088,3 +1090,27 @@ html, body {
   font-family: inherit;
 }
 .search-btn-sm:active { opacity: 0.85; }
+
+/* ── 출발/도착 교환 버튼 ── */
+.loc-vline-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+.swap-btn {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.1);
+  z-index: 1;
+}
+.swap-btn:active { background: #f0f0f0; }

@@ -21,58 +21,65 @@
   <!-- ==================== 홈 화면 ==================== -->
   <div id="screen-home" class="screen active">
     <div id="map-home" class="map-container"></div>
-    <!-- 검색 패널 (고정) -->
-    <div class="search-panel" id="search-panel">
+    <!-- 검색 시트 -->
+    <div class="bottom-sheet" id="search-sheet">
+      <div class="sheet-handle"></div>
       <!-- 출발지 -->
       <div class="loc-row">
         <div class="loc-track">
           <div class="loc-dot dot-start"></div>
-          <div class="loc-swap-area">
+          <div class="loc-vline-wrap">
             <div class="loc-vline"></div>
-            <button class="swap-btn" onclick="swapFromTo()" title="출발/도착 교환">⇅</button>
+            <button class="swap-btn" onclick="swapFromTo()" title="출발/도착 교환">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M4 2v10M4 12L2 10M4 12L6 10" stroke="#888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M10 12V2M10 2L8 4M10 2L12 4" stroke="#888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </div>
         </div>
-        <div class="loc-input-wrap">
-          <input type="text" class="loc-input-text" id="input-from"
-            placeholder="출발지 (현위치)" autocomplete="off"
-            oninput="onHomeInput('from', this.value)"
-            onfocus="onHomeFocus('from')"
-            value="">
+        <div class="loc-input" id="input-from" onclick="openPlaceSearch('from')">
+          <span class="loc-text" id="text-from">현위치</span>
           <span class="loc-tag tag-gps" id="tag-from">GPS</span>
         </div>
       </div>
-
-      <!-- 자동완성 (출발) -->
-      <div class="home-autocomplete" id="autocomplete-from" style="display:none"></div>
-
+      <!-- 경유지 (기본 숨김) -->
+      <div class="loc-row" id="via-row" style="display:none">
+        <div class="loc-track">
+          <div class="loc-dot dot-via"></div>
+          <div class="loc-vline"></div>
+        </div>
+        <div class="loc-input" id="input-via" onclick="openPlaceSearch('via')">
+          <span class="loc-text" id="text-via">경유지 입력</span>
+          <span class="loc-tag tag-via">경유</span>
+        </div>
+      </div>
       <!-- 도착지 -->
       <div class="loc-row">
         <div class="loc-track">
           <div class="loc-dot dot-end"></div>
         </div>
-        <div class="loc-input-wrap">
-          <input type="text" class="loc-input-text" id="input-to"
-            placeholder="도착지 입력" autocomplete="off"
-            oninput="onHomeInput('to', this.value)"
-            onfocus="onHomeFocus('to')">
-          <button class="save-star-btn" id="save-star-btn" onclick="saveCurrentTo()" title="저장">☆</button>
+        <div class="loc-input" id="input-to" onclick="openPlaceSearch('to')">
+          <span class="loc-text loc-placeholder" id="text-to">도착지 입력 또는 선택</span>
         </div>
+        <button class="save-star-btn" id="save-star-btn" onclick="saveCurrentTo()" title="이 장소 저장">☆</button>
       </div>
-
-      <!-- 자동완성 (도착) -->
-      <div class="home-autocomplete" id="autocomplete-to" style="display:none"></div>
-
-      <!-- 시간 + 검색 버튼 -->
-      <div class="search-bottom-row">
+      <!-- 경유지 추가 버튼 -->
+      <div class="add-via-btn" id="add-via-btn" onclick="toggleVia()">+ 경유지 추가</div>
+      <!-- 시간 선택 -->
+      <div class="time-row">
+        <span class="time-label">출발</span>
         <div class="time-chips">
           <span class="time-chip active" id="chip-now" onclick="setTimeChip('now')">지금</span>
           <span class="time-chip" id="chip-1h" onclick="setTimeChip('1h')">+1시간</span>
           <span class="time-chip" id="chip-2h" onclick="setTimeChip('2h')">+2시간</span>
           <span class="time-chip" id="chip-custom" onclick="setTimeChip('custom')">직접입력</span>
         </div>
-        <button class="search-btn-sm" onclick="searchRoute()">검색</button>
       </div>
+      <!-- 직접입력 시간 -->
       <input type="time" id="custom-time" class="custom-time-input" style="display:none" onchange="onCustomTime(this.value)">
+      <!-- 검색 버튼 -->
+      <button class="search-btn" onclick="searchRoute()">경로 검색</button>
     </div>
   </div>
 

@@ -125,8 +125,8 @@ function initSheetSwipe() {
 
 // ── 경로 검색 ──────────────────────────────────────────────────
 function searchRoute() {
-  const fromName = document.getElementById('input-from')?.value?.trim() || '현위치';
-  const toName   = document.getElementById('input-to')?.value?.trim()   || '';
+  const fromName = document.getElementById('text-from')?.textContent?.trim() || '현위치';
+  const toName   = document.getElementById('text-to')?.textContent?.trim()   || '';
 
   if (!toName || toName === '도착지 입력 또는 선택') {
     alert('도착지를 입력해주세요');
@@ -136,15 +136,10 @@ function searchRoute() {
   const searchTime = getSearchTime();
   const dayType    = getDayType(searchTime);
 
-  // 이미 selectHomePlace로 state가 설정됐으면 그대로, 아니면 텍스트로 찾기
-  if (!APP.searchState.from || APP.searchState.from.name !== fromName) {
-    APP.searchState.from = (!fromName || fromName === '현위치')
-      ? { name: '현위치', ...APP.myLocation }
-      : (findStop(fromName) || { name: fromName, ...APP.myLocation });
-  }
-  if (!APP.searchState.to || APP.searchState.to.name !== toName) {
-    APP.searchState.to = findStop(toName) || { name: toName };
-  }
+  APP.searchState.from = (!fromName || fromName === '현위치')
+    ? { name: '현위치', ...APP.myLocation }
+    : (findStop(fromName) || { name: fromName, ...APP.myLocation });
+  APP.searchState.to = findStop(toName) || { name: toName };
 
   const results = findRoutes(fromName, toName, searchTime, dayType);
 
@@ -288,10 +283,10 @@ function selectPlace(target, place) {
 
 // ── 빠른 검색 (즐겨찾기) ──────────────────────────────────────
 function quickSearch(from, to) {
-  const fromEl = document.getElementById('input-from');
-  const toEl   = document.getElementById('input-to');
-  if (fromEl) fromEl.value = from === '현위치' ? '' : from;
-  if (toEl)   toEl.value   = to;
+  const fromEl = document.getElementById('text-from');
+  const toEl   = document.getElementById('text-to');
+  if (fromEl) { fromEl.textContent = from; fromEl.classList.remove('loc-placeholder'); }
+  if (toEl)   { toEl.textContent = to;     toEl.classList.remove('loc-placeholder'); }
 
   const fromStop = from === '현위치' ? { name: '현위치', ...APP.myLocation } : findStop(from);
   const toStop   = findStop(to);
@@ -304,8 +299,8 @@ function quickSearch(from, to) {
 
 function quickSearchFrom(name, lat, lng) {
   APP.searchState.from = { name, lat: Number(lat), lng: Number(lng) };
-  const el = document.getElementById('input-from');
-  if (el) el.value = name;
+  const el = document.getElementById('text-from');
+  if (el) { el.textContent = name; el.classList.remove('loc-placeholder'); }
   const tag = document.getElementById('tag-from');
   if (tag) tag.style.display = 'none';
   showScreen('home');
@@ -313,8 +308,8 @@ function quickSearchFrom(name, lat, lng) {
 
 function quickSearchTo(name, lat, lng) {
   APP.searchState.to = { name, lat: Number(lat), lng: Number(lng) };
-  const el = document.getElementById('input-to');
-  if (el) el.value = name;
+  const el = document.getElementById('text-to');
+  if (el) { el.textContent = name; el.classList.remove('loc-placeholder'); }
   showScreen('home');
 }
 
@@ -474,116 +469,32 @@ function goToMyLocation() {
   if (mapHome) mapHome.setCenter(new kakao.maps.LatLng(APP.myLocation.lat, APP.myLocation.lng));
 }
 
-// ── 홈 인라인 검색창 ───────────────────────────────────────────
-let _homeFocusTarget = null;
-
-function onHomeFocus(target) {
-  _homeFocusTarget = target;
-  // 다른 쪽 자동완성 닫기
-  const other = target === 'from' ? 'to' : 'from';
-  const otherAc = document.getElementById('autocomplete-' + other);
-  if (otherAc) otherAc.style.display = 'none';
-}
-
-function onHomeInput(target, val) {
-  const ac = document.getElementById('autocomplete-' + target);
-  if (!ac) return;
-
-  if (!val.trim()) {
-    // 빈값 → GPS/현위치
-    if (target === 'from') {
-      APP.searchState.from = { name: '현위치', ...APP.myLocation };
-      document.getElementById('tag-from').style.display = '';
-    }
-    ac.style.display = 'none';
-    return;
-  }
-
-  document.getElementById('tag-from')?.style.setProperty('display', target === 'from' ? 'none' : '');
-
-  // 정류장 검색
-  const matches = APP.stops
-    .filter(s => s.displayName.includes(val) || s.name.includes(val))
-    .slice(0, 10);
-
-  // 저장된 장소도 포함
-  const savedMatches = APP.savedPlaces
-    .filter(p => (p.label || p.name).includes(val))
-    .slice(0, 3);
-
-  if (!matches.length && !savedMatches.length) {
-    ac.innerHTML = `<div class="home-ac-item"><span class="home-ac-icon">🔍</span><span class="home-ac-name" style="color:#aaa">검색 결과 없음</span></div>`;
-    ac.style.display = 'block';
-    return;
-  }
-
-  let html = '';
-  savedMatches.forEach(p => {
-    html += `<div class="home-ac-item" onclick="selectHomePlace('${target}','${p.label||p.name}',${p.lat},${p.lng})">
-      <span class="home-ac-icon">⭐</span>
-      <span class="home-ac-name">${p.label || p.name}</span>
-      <span class="home-ac-dist">${p.name}</span>
-    </div>`;
-  });
-  matches.forEach(s => {
-    const dist = coordDist(s.lat, s.lng, APP.myLocation.lat, APP.myLocation.lng);
-    const distStr = dist < 1000 ? `${Math.round(dist)}m` : `${(dist/1000).toFixed(1)}km`;
-    html += `<div class="home-ac-item" onclick="selectHomePlace('${target}','${s.displayName}',${s.lat},${s.lng})">
-      <span class="home-ac-icon">🚌</span>
-      <span class="home-ac-name">${s.displayName}</span>
-      <span class="home-ac-dist">${distStr}</span>
-    </div>`;
-  });
-
-  ac.innerHTML = html;
-  ac.style.display = 'block';
-}
-
-function selectHomePlace(target, name, lat, lng) {
-  const place = { name, lat: Number(lat), lng: Number(lng) };
-  const inputEl = document.getElementById('input-' + target);
-  const acEl    = document.getElementById('autocomplete-' + target);
-
-  if (inputEl) inputEl.value = name;
-  if (acEl)    acEl.style.display = 'none';
-
-  if (target === 'from') {
-    APP.searchState.from = place;
-    document.getElementById('tag-from').style.display = 'none';
-  } else {
-    APP.searchState.to = place;
-  }
-  // 키보드 닫기
-  inputEl?.blur();
-}
 
 // 출발/도착 교환
 function swapFromTo() {
-  const fromInput = document.getElementById('input-from');
-  const toInput   = document.getElementById('input-to');
-  if (!fromInput || !toInput) return;
+  const fromEl = document.getElementById('text-from');
+  const toEl   = document.getElementById('text-to');
+  if (!fromEl || !toEl) return;
 
-  const fromVal = fromInput.value;
-  const toVal   = toInput.value;
+  // 텍스트 교환
+  const fromVal = fromEl.textContent;
+  const toVal   = toEl.textContent;
+  fromEl.textContent = toVal;
+  toEl.textContent   = fromVal;
 
-  // 값 교환
-  fromInput.value = toVal;
-  toInput.value   = fromVal;
-
-  // state 교환
-  const tmp = APP.searchState.from;
-  APP.searchState.from = APP.searchState.to;
-  APP.searchState.to   = tmp;
+  // placeholder 클래스 처리
+  const placeholder = '도착지 입력 또는 선택';
+  fromEl.classList.toggle('loc-placeholder', fromEl.textContent === placeholder);
+  toEl.classList.toggle('loc-placeholder',   toEl.textContent   === placeholder);
 
   // GPS 태그 처리
   const tagFrom = document.getElementById('tag-from');
-  if (tagFrom) {
-    tagFrom.style.display = (fromInput.value === '' || fromInput.value === '현위치') ? '' : 'none';
-  }
+  if (tagFrom) tagFrom.style.display = (fromVal === '현위치') ? 'none' : '';
 
-  // 자동완성 닫기
-  document.getElementById('autocomplete-from').style.display = 'none';
-  document.getElementById('autocomplete-to').style.display = 'none';
+  // state 교환
+  const tmp = APP.searchState.from;
+  APP.searchState.from = APP.searchState.to || { name: toVal };
+  APP.searchState.to   = tmp || { name: fromVal };
 }
 
 // 외부 클릭 시 자동완성 닫기
