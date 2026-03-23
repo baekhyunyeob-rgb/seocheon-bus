@@ -95,7 +95,7 @@ html, body {
   flex-direction: column;
   align-items: center;
   flex-shrink: 0;
-  gap: 2px;
+  width: 20px;  /* 고정 너비 — 모든 행에서 동일 */
 }
 
 .loc-dot {
@@ -108,10 +108,25 @@ html, body {
 .dot-end   { background: var(--red); }
 
 .loc-vline {
-  width: 2px; height: 8px;
-  background: linear-gradient(to bottom, var(--blue), #aaa);
+  width: 2px;
+  height: 20px;
+  background: var(--blue);
   position: relative;
+  cursor: pointer;
 }
+/* 위 화살표 (↑) */
+.loc-vline::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 5px solid var(--blue);
+}
+/* 아래 화살표 (↓) */
 .loc-vline::after {
   content: '';
   position: absolute;
@@ -121,8 +136,9 @@ html, body {
   width: 0; height: 0;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
-  border-top: 5px solid #aaa;
+  border-top: 5px solid var(--blue);
 }
+.loc-vline:active { opacity: 0.6; }
 
 .loc-input {
   flex: 1;

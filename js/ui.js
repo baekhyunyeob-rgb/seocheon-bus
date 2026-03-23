@@ -210,8 +210,10 @@ function openPlaceSearch(target) {
 function closePlaceModal() {
   const modal = document.getElementById('place-modal');
   if (modal) modal.style.display = 'none';
-  document.getElementById('place-input').value = '';
-  document.getElementById('place-results').innerHTML = '';
+  const input = document.getElementById('place-input');
+  if (input) input.value = '';
+  const results = document.getElementById('place-results');
+  if (results) results.innerHTML = '';
 }
 
 function renderModalSaved(target) {

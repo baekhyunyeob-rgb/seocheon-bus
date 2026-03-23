@@ -21,6 +21,9 @@
   <!-- ==================== 홈 화면 ==================== -->
   <div id="screen-home" class="screen active">
     <div id="map-home" class="map-container"></div>
+    <div id="out-of-area-notice" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(0,0,0,0.7);color:#fff;border-radius:20px;padding:7px 16px;font-size:12px;font-weight:600;align-items:center;gap:6px;white-space:nowrap;pointer-events:none">
+      <span>📍</span><span>서비스 지역(서천군)이 아닙니다</span>
+    </div>
     <!-- 검색 시트 -->
     <div class="bottom-sheet" id="search-sheet">
       <div class="sheet-handle"></div>
@@ -28,15 +31,7 @@
       <div class="loc-row">
         <div class="loc-track">
           <div class="loc-dot dot-start"></div>
-          <div class="loc-vline-wrap">
-            <div class="loc-vline"></div>
-            <button class="swap-btn" onclick="swapFromTo()" title="출발/도착 교환">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M4 2v10M4 12L2 10M4 12L6 10" stroke="#888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M10 12V2M10 2L8 4M10 2L12 4" stroke="#888" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
+          <div class="loc-vline loc-swap" onclick="swapFromTo()" title="출발/도착 교환"></div>
         </div>
         <div class="loc-input" id="input-from" onclick="openPlaceSearch('from')">
           <span class="loc-text" id="text-from">현위치</span>
@@ -203,8 +198,7 @@
         <button class="modal-close" onclick="closePlaceModal()">✕</button>
       </div>
       <input type="text" class="modal-input" id="place-input" placeholder="정류장명 또는 장소 입력" oninput="onPlaceInput(this.value)" autocomplete="off">
-      <div class="modal-results" id="modal-results"></div>
-      <div class="modal-saved" id="modal-saved"></div>
+      <div class="modal-results" id="place-results"></div>
     </div>
   </div>
 

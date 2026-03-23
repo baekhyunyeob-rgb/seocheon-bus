@@ -60,7 +60,11 @@ function updateMyMarker() {
   mapHome.setCenter(pos);
 
   if (!isInSeocheon(APP.myLocation.lat, APP.myLocation.lng)) {
-    document.getElementById('out-of-area-notice')?.style.setProperty('display','flex');
+    const notice = document.getElementById('out-of-area-notice');
+    if (notice) notice.style.display = 'flex';
+    // 서천 기본 위치로 지도 고정
+    mapHome.setCenter(new kakao.maps.LatLng(36.0758, 126.6908));
+    mapHome.setLevel(8);
   }
 }
 
