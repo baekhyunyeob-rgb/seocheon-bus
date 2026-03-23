@@ -1562,22 +1562,24 @@ function renderRouteCard(r, idx, isBest, dayType) {
     const busNum1 = getBusDisplayNum(r.route);
     const busNum2 = getBusDisplayNum(r.route2);
     const displayBoardTime = r.boardTime || r.nextBus;
-    return `<div class="route-card transfer-card" onclick="showDetail(${idx})">
-      <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;flex-wrap:wrap">
+    return `<div class="route-card ${isBest ? 'best' : 'transfer-card'}" onclick="showDetail(${idx})">
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;flex-wrap:wrap">
         <span class="bus-pill" style="background:${zoneColor}">${busNum1}</span>
-        <span style="color:#888;font-size:12px">→</span>
-        <span style="color:#888;font-size:12px">${r.transferHub}에서</span>
+        <span style="color:#888;font-size:11px">→</span>
         <span class="bus-pill" style="background:${zoneColor2}">${busNum2}</span>
-        <span style="color:#888;font-size:12px">환승</span>
+        <span style="color:#888;font-size:11px">${r.transferHub} 환승</span>
         <span class="rc-badge badge-transfer" style="margin-left:auto">1회 환승</span>
       </div>
-      <div style="font-size:13px;color:#222">
+      <div style="font-size:12px;color:#222;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
         <span style="color:#185FA5;font-weight:700">${displayBoardTime}</span>
-        <span style="color:#555;font-size:11px"> 출발</span>
-        <span style="color:#888;font-size:12px"> → ${r.hub2BoardTime || r.nextBus2} 환승 →</span>
-        <span style="color:#E24B4A;font-weight:700"> ${arriveTime2}</span>
-        <span style="color:#555;font-size:11px"> 도착</span>
-        <span style="color:#555;font-size:11px;float:right">${formatDuration(r.minutes)}</span>
+        <span style="color:#555;font-size:11px">탑승</span>
+        <span style="color:#aaa">·</span>
+        <span style="color:#888;font-size:11px">${r.transferHub}</span>
+        <span style="color:#E24B4A;font-size:11px">${r.hub2BoardTime||r.nextBus2} 환승</span>
+        <span style="color:#aaa">·</span>
+        <span style="color:#E24B4A;font-weight:700">${arriveTime2}</span>
+        <span style="color:#555;font-size:11px">도착</span>
+        <span style="color:#555;font-size:11px;margin-left:auto">${formatDuration(r.minutes)}</span>
       </div>
       ${timesRow}
     </div>`;
@@ -2188,10 +2190,11 @@ function renderRouteList(zoneId) {
   container.innerHTML = filtered.map((r, idx) => {
     const color = getZoneColor(r);
     const zoneName = ZONES.find(z => z.id === getZoneId(r))?.name || '';
+    const lineName = r['노선군'].replace(/\d+번대?\s*/,'').replace(/타시도\s*/,'').trim();
     return `<div class="route-list-item" onclick="showRouteTimetable('${r['번호']}', ${idx})">
       <span class="rli-num" style="background:${color}">${getBusDisplayNum(r)}</span>
       <div class="rli-info">
-        <div class="rli-name">${zoneName}</div>
+        ${lineName ? `<div class="rli-name">${lineName}</div>` : ''}
         <div class="rli-sub">${r['기점']} ↔ ${r['종점']} · ${r['거리']}km</div>
       </div>
       <span class="rli-count">평일 ${r['평일횟수']}회</span>
@@ -2382,7 +2385,7 @@ function addArrowsOnPath(path, color, bothWay = false) {
 
   // 지도 레벨별 화살표 개수
   const level = mapRoutes ? mapRoutes.getLevel() : 8;
-  const arrowCount = level <= 4 ? 10 : level <= 6 ? 7 : level <= 8 ? 5 : 3;
+  const arrowCount = level <= 4 ? 14 : level <= 6 ? 10 : level <= 8 ? 7 : 4;
   const step = Math.max(2, Math.floor(path.length / arrowCount));
 
   // 출발/도착 근처 제외 범위 (전체 경로의 10%)
@@ -2402,11 +2405,11 @@ function addArrowsOnPath(path, color, bothWay = false) {
       (p1.getLng() + p2.getLng()) / 2
     );
 
-    // 직삼각형 SVG 화살표 — 원 배경 없이 깔끔하게
+    // 직삼각형 SVG 화살표 — 작고 깔끔하게
     const mkArrow = (rot) => `
-      <svg width="14" height="14" viewBox="0 0 14 14"
-           style="transform:rotate(${rot}deg);filter:drop-shadow(0 1px 1px rgba(0,0,0,0.4))">
-        <polygon points="7,0 14,14 0,14" fill="${color}" opacity="0.9"/>
+      <svg width="10" height="10" viewBox="0 0 14 14"
+           style="transform:rotate(${rot}deg);filter:drop-shadow(0 1px 1px rgba(0,0,0,0.35))">
+        <polygon points="7,0 14,14 0,14" fill="${color}" opacity="0.85"/>
       </svg>`;
 
     let content;
