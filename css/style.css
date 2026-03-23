@@ -387,11 +387,12 @@ html, body {
 }
 .bus-live-top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 3px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
-.bus-live-name { font-size: 13px; font-weight: 700; color: var(--white); }
+.bus-live-name { font-size: 13px; font-weight: 700; color: var(--white); white-space: nowrap; }
 .live-badge {
   font-size: 9px;
   font-weight: 700;
@@ -399,8 +400,9 @@ html, body {
   color: var(--white);
   padding: 2px 6px;
   border-radius: 4px;
+  flex-shrink: 0;
 }
-.bus-live-status { font-size: 11px; color: rgba(255,255,255,.9); }
+.bus-live-status { font-size: 11px; color: rgba(255,255,255,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .stop-list { padding: 4px 0 8px; }
 
@@ -435,6 +437,7 @@ html, body {
 }
 .sc-upcoming { background: var(--white); border: 1.5px solid #ccc; }
 .sc-end { background: var(--red); border: 1.5px solid var(--red); }
+.sc-transfer { background: #FF8C00; border: 1.5px solid #FF8C00; }
 .sc-skip { background: #eee; border: 1px dashed #ccc; width: 8px; height: 8px; }
 
 .stop-vline {
@@ -721,9 +724,9 @@ html, body {
   border-radius: 4px;
   cursor: pointer;
 }
-.pat-from { background: var(--green-light); color: var(--green-text); }
-.pat-to { background: #f0f0f0; color: #aaa; }
-.pat-to.active { background: var(--green-light); color: var(--green-text); }
+.pat-from { background: #E6F1FB; color: #185FA5; }
+.pat-to { background: #FDECEA; color: #E24B4A; }
+.pat-to.active { background: #FDECEA; color: #E24B4A; }
 
 .fav-empty {
   text-align: center;
