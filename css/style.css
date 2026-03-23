@@ -821,6 +821,10 @@ html, body {
   border-top: 0.5px solid var(--gray-border);
   display: flex;
   z-index: 50;
+  transition: transform 0.25s ease;
+}
+.tabbar.hide {
+  transform: translateY(100%);
 }
 .tab {
   flex: 1;

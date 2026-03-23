@@ -86,6 +86,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   initZoneTabs();
   initFavorites();
   loadKakaoMap();
+  initTabbarScroll();
+  initSheetSwipe();
 
   // 초기 history 상태 설정
   // guard state를 하나 더 쌓아 popstate가 반드시 발생하도록
@@ -3186,4 +3188,100 @@ function quickSearchTo(name, lat, lng) {
   document.getElementById('text-to').textContent = name;
   document.getElementById('text-to').classList.remove('loc-placeholder');
   showScreen('home');
+}
+
+// ==================== 탭바 스크롤 숨김 ====================
+function initTabbarScroll() {
+  const tabbar = document.querySelector('.tabbar');
+  if (!tabbar) return;
+
+  // 스크롤 가능한 화면들 감지
+  const scrollTargets = [
+    'result-body',   // 검색결과
+    'stop-list',     // 경로상세
+    'timetable-body',// 버스시간표
+    'route-list',    // 버스노선도
+    'transport-body',// 시외·기차
+    'favorites-body' // 즐겨찾기
+  ];
+
+  let lastY = 0;
+  let ticking = false;
+
+  const onScroll = (e) => {
+    const el = e.target;
+    if (!ticking) {
+      requestAnimationFrame(() => {
+        const y = el.scrollTop;
+        if (y > lastY + 5) {
+          // 위로 스크롤 → 탭바 숨김
+          tabbar.classList.add('hide');
+        } else if (y < lastY - 5) {
+          // 아래로 스크롤 → 탭바 표시
+          tabbar.classList.remove('hide');
+        }
+        lastY = y;
+        ticking = false;
+      });
+      ticking = true;
+    }
+  };
+
+  scrollTargets.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('scroll', onScroll, { passive: true });
+  });
+
+  // 화면 전환 시 탭바 항상 다시 표시
+  const origShowScreen = window.showScreenNoHistory;
+  if (origShowScreen) {
+    window.showScreenNoHistory = function(name) {
+      tabbar.classList.remove('hide');
+      origShowScreen(name);
+    };
+  }
+}
+
+// ==================== 바텀시트 스와이프 닫기 ====================
+function initSheetSwipe() {
+  const sheet = document.getElementById('search-sheet');
+  const handle = sheet?.querySelector('.sheet-handle');
+  if (!sheet || !handle) return;
+
+  let startY = 0;
+  let isDragging = false;
+
+  handle.addEventListener('touchstart', (e) => {
+    startY = e.touches[0].clientY;
+    isDragging = true;
+  }, { passive: true });
+
+  handle.addEventListener('touchmove', (e) => {
+    if (!isDragging) return;
+    const dy = e.touches[0].clientY - startY;
+    // 아래로 50px 이상 드래그 → 시트 따라 내려감
+    if (dy > 0) {
+      sheet.style.transform = `translateY(${dy}px)`;
+      sheet.style.transition = 'none';
+    }
+  }, { passive: true });
+
+  handle.addEventListener('touchend', (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    const dy = e.changedTouches[0].clientY - startY;
+    sheet.style.transition = '';
+
+    if (dy > 80) {
+      // 80px 이상 드래그 → 홈으로 (시트 닫힘)
+      sheet.style.transform = `translateY(100%)`;
+      setTimeout(() => {
+        sheet.style.transform = '';
+        showScreen('home');
+      }, 250);
+    } else {
+      // 원위치
+      sheet.style.transform = '';
+    }
+  });
 }
