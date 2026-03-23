@@ -1829,18 +1829,19 @@ function renderTransferStopList(r) {
     </div>`;
 
   let html = '';
-  // 탑승 정류장 — 한 줄: 정류장명  |  HH:MM 탑승
+  // 출발 — 노선번호 + 시각 + 탑승 (환승지와 동일 형식)
   html += stopRow('sc-current', true, fromName,
-    `<span style="color:#185FA5;font-weight:700;font-size:12px">${boardTime}</span>
-     <span class="stop-current-tag">탑승</span>`);
+    `<span style="background:${col1};color:#fff;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700">${busNum1}</span>
+     <span style="color:#185FA5;font-weight:700;font-size:12px">${boardTime}</span>
+     <span style="color:#185FA5;font-size:11px">탑승</span>`);
 
-  // 환승지 — 한 줄: 환승지명  |  HH:MM 도착  L314번 HH:MM 환승
+  // 환승지 — 도착시각 + 노선번호 + 환승탑승시각
   html += stopRow('sc-transfer', true, hubName,
     `<span style="color:#FF8C00;font-size:11px;font-weight:600">${hubArrTime} 도착</span>
      <span style="background:${col2};color:#fff;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700">${busNum2}</span>
      <span style="color:#FF8C00;font-size:11px;font-weight:700">${hub2Board} 환승</span>`);
 
-  // 최종 도착 — 한 줄: 도착지명  |  HH:MM 도착
+  // 도착 — 시각 + 도착
   html += stopRow('sc-end', false, toName,
     `<span style="color:#E24B4A;font-weight:700;font-size:12px">${arrTime}</span>
      <span style="color:#E24B4A;font-size:11px">도착</span>`);
@@ -1900,9 +1901,12 @@ function renderStopList(stops, nextBus) {
     if (isDone) {
       etaEl = `<span class="stop-eta" style="color:#ddd">통과</span>`;
     } else if (isBoard) {
+      const busNum = detailRoute ? getBusDisplayNum(detailRoute.route) : '';
+      const busCol = detailRoute ? getZoneColor(detailRoute.route) : '#185FA5';
       etaEl = `<span style="display:flex;align-items:center;gap:3px;flex-shrink:0">
+        <span style="background:${busCol};color:#fff;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700">${busNum}</span>
         <span style="color:#185FA5;font-weight:700;font-size:12px">${etaStr}</span>
-        <span class="stop-current-tag">탑승</span>
+        <span style="color:#185FA5;font-size:11px">탑승</span>
       </span>`;
     } else if (isEnd) {
       etaEl = `<span style="display:flex;align-items:center;gap:3px;flex-shrink:0">
@@ -1929,23 +1933,24 @@ function renderStopList(stops, nextBus) {
 function initDetailMap(result) {
   const container = document.getElementById('map-detail');
   if (!container) return;
-
   if (mapDetail) { mapDetail = null; container.innerHTML = ''; }
 
-  const fromStop = searchState.from?.lat ? searchState.from
-    : STOPS.find(s => s.name.includes((searchState.from?.name||'서천터미널').substring(0,4)));
-  const toStop = searchState.to?.lat ? searchState.to
-    : STOPS.find(s => s.name.includes((searchState.to?.name||'').substring(0,4)));
-
-  const centerLat = fromStop ? fromStop.lat : myLocation.lat;
-  const centerLng = fromStop ? fromStop.lng : myLocation.lng;
+  // 출발/도착 정류장 좌표 — stops DB에서 정확한 이름으로 찾기
+  const getStopCoord = (name) => {
+    if (!name) return null;
+    return STOPS.find(s => s.name === name)
+      || STOPS.find(s => s.displayName === name)
+      || STOPS.find(s => s.name.includes(name.substring(0,4)));
+  };
+  const fromStop = getStopCoord(searchState.from?.name) || searchState.from;
+  const toStop   = getStopCoord(searchState.to?.name)   || searchState.to;
 
   mapDetail = new kakao.maps.Map(container, {
-    center: new kakao.maps.LatLng(centerLat, centerLng),
+    center: new kakao.maps.LatLng(fromStop?.lat || myLocation.lat, fromStop?.lng || myLocation.lng),
     level: 9
   });
 
-  // 출발/도착 마커
+  // 마커
   const addMarker = (lat, lng, label, color) => {
     new kakao.maps.CustomOverlay({
       position: new kakao.maps.LatLng(lat, lng),
@@ -1958,122 +1963,113 @@ function initDetailMap(result) {
     }).setMap(mapDetail);
   };
 
-  // 노선 전체 coords에서 출발지~도착지 구간만 추출
-  // 환승의 경우 1구간 + 2구간 coords를 합침
-  let allCoords = [];
+  const color1 = result.route ? getZoneColor(result.route) : '#1D9E75';
+  const color2 = result.route2 ? getZoneColor(result.route2) : color1;
 
-  if (result.isTransfer && result.route && result.route2) {
-    // 1구간: 출발지 → 환승지
-    const coords1 = (getRouteCoords(result.route) || []).filter(c => c.lat);
-    const hubName = result.transferHub;
-    const hubStop = STOPS.find(s => s.name === hubName || s.displayName === hubName);
-
-    if (fromStop && hubStop && coords1.length > 0) {
-      let fi = 0, fd = 9999, hi = coords1.length-1, hd = 9999;
-      coords1.forEach((c, i) => {
-        const df = coordDist(c.lat, c.lng, fromStop.lat, fromStop.lng);
-        const dh = coordDist(c.lat, c.lng, hubStop.lat, hubStop.lng);
-        if (df < fd) { fd = df; fi = i; }
-        if (dh < hd) { hd = dh; hi = i; }
-      });
-      if (fi > hi) { const t = fi; fi = hi; hi = t; }
-      allCoords = allCoords.concat(coords1.slice(fi, hi + 1));
-    } else {
-      allCoords = allCoords.concat(coords1);
-    }
-
-    // 2구간: 환승지 → 도착지
-    const coords2 = (getRouteCoords(result.route2) || []).filter(c => c.lat);
-    if (hubStop && toStop && coords2.length > 0) {
-      let hi2 = 0, hd2 = 9999, ti = coords2.length-1, td = 9999;
-      coords2.forEach((c, i) => {
-        const dh = coordDist(c.lat, c.lng, hubStop.lat, hubStop.lng);
-        const dt = coordDist(c.lat, c.lng, toStop.lat, toStop.lng);
-        if (dh < hd2) { hd2 = dh; hi2 = i; }
-        if (dt < td) { td = dt; ti = i; }
-      });
-      if (hi2 > ti) { const t = hi2; hi2 = ti; ti = t; }
-      allCoords = allCoords.concat(coords2.slice(hi2, ti + 1));
-    } else {
-      allCoords = allCoords.concat(coords2);
-    }
-  } else {
-    allCoords = (result.coords || getRouteCoords(result.route) || []).filter(c => c.lat);
-  }
-
-  let segCoords = allCoords;
-
-  // 직행만 출발지~도착지 구간 재추출 (환승은 이미 구간별로 합쳤으므로 생략)
-  if (!result.isTransfer && fromStop && toStop && allCoords.length > 0) {
-    // 출발지에 가장 가까운 인덱스
-    let fromI = 0, fromD = 9999999;
-    allCoords.forEach((c, i) => {
-      const d = Math.sqrt((c.lat-fromStop.lat)**2+(c.lng-fromStop.lng)**2)*111000;
-      if (d < fromD) { fromD = d; fromI = i; }
+  // 폴리라인 그리기 (직선 먼저 → 도로로 교체)
+  const drawPoly = (coords, color, onDrawn) => {
+    if (!coords || coords.length < 2) return;
+    const straight = coords.map(c => new kakao.maps.LatLng(c.lat, c.lng));
+    const tmp = new kakao.maps.Polyline({
+      map: mapDetail, path: straight,
+      strokeWeight: 5, strokeColor: color, strokeOpacity: 0.35, strokeStyle: 'dashed'
     });
-    // 도착지에 가장 가까운 인덱스
-    let toI = allCoords.length-1, toD = 9999999;
-    allCoords.forEach((c, i) => {
-      const d = Math.sqrt((c.lat-toStop.lat)**2+(c.lng-toStop.lng)**2)*111000;
-      if (d < toD) { toD = d; toI = i; }
-    });
-    // 방향 보정 (fromI < toI)
-    if (fromI > toI) { const tmp = fromI; fromI = toI; toI = tmp; }
-    segCoords = allCoords.slice(fromI, toI + 1);
-  }
-
-  // 구간 폴리라인 — 카카오 모빌리티 API 도로 기반
-  const lineColor = result.route ? getZoneColor(result.route) : '#1D9E75';
-  if (segCoords.length >= 2) {
-    // 직선으로 먼저 표시
-    const straightPath = segCoords.map(c => new kakao.maps.LatLng(c.lat, c.lng));
-    const polyDetail = new kakao.maps.Polyline({
-      map: mapDetail, path: straightPath,
-      strokeWeight: 5, strokeColor: lineColor,
-      strokeOpacity: 0.4, strokeStyle: 'dashed'
-    });
-    // 도로 기반으로 교체
-    fetchRoadPath(segCoords).then(roadPath => {
-      polyDetail.setMap(null);
-      const finalPath = (roadPath && roadPath.length >= 2) ? roadPath : straightPath;
+    fetchRoadPath(coords).then(road => {
+      tmp.setMap(null);
+      const path = (road && road.length >= 2) ? road : straight;
       new kakao.maps.Polyline({
-        map: mapDetail, path: finalPath,
-        strokeWeight: 5, strokeColor: lineColor,
-        strokeOpacity: 0.95, strokeStyle: 'solid'
+        map: mapDetail, path,
+        strokeWeight: 5, strokeColor: color, strokeOpacity: 0.95, strokeStyle: 'solid'
       });
-      if (roadPath) {
-        const rb = new kakao.maps.LatLngBounds();
-        roadPath.forEach(p => rb.extend(p));
-        mapDetail.setBounds(rb, 80);
-      }
+      if (onDrawn) onDrawn(path);
     });
+  };
+
+  if (result.isTransfer) {
+    // 환승: 1구간, 2구간 각각 별도로 그리기
+    const hubStop = getStopCoord(result.transferHub);
+    const coords1 = (getRouteCoords(result.route)  || []).filter(c => c.lat);
+    const coords2 = (getRouteCoords(result.route2) || []).filter(c => c.lat);
+
+    // 1구간: fromStop → hubStop
+    let seg1 = coords1;
+    if (fromStop && hubStop && coords1.length > 0) {
+      let fi=0,fd=9999,hi=coords1.length-1,hd=9999;
+      coords1.forEach((c,i) => {
+        const df = coordDist(c.lat,c.lng,fromStop.lat,fromStop.lng);
+        const dh = coordDist(c.lat,c.lng,hubStop.lat,hubStop.lng);
+        if (df<fd){fd=df;fi=i;} if (dh<hd){hd=dh;hi=i;}
+      });
+      if (fi>hi){const t=fi;fi=hi;hi=t;}
+      seg1 = coords1.slice(fi, hi+1);
+    }
+
+    // 2구간: hubStop → toStop
+    let seg2 = coords2;
+    if (hubStop && toStop && coords2.length > 0) {
+      let hi2=0,hd2=9999,ti=coords2.length-1,td=9999;
+      coords2.forEach((c,i) => {
+        const dh = coordDist(c.lat,c.lng,hubStop.lat,hubStop.lng);
+        const dt = coordDist(c.lat,c.lng,toStop.lat,toStop.lng);
+        if (dh<hd2){hd2=dh;hi2=i;} if (dt<td){td=dt;ti=i;}
+      });
+      if (hi2>ti){const t=hi2;hi2=ti;ti=t;}
+      seg2 = coords2.slice(hi2, ti+1);
+    }
+
+    const bounds = new kakao.maps.LatLngBounds();
+    drawPoly(seg1, color1, path => path.forEach(p => bounds.extend(p)));
+    drawPoly(seg2, color2, path => {
+      path.forEach(p => bounds.extend(p));
+      mapDetail.setBounds(bounds, 80);
+    });
+
+    if (fromStop) addMarker(fromStop.lat, fromStop.lng, '출발', '#185FA5');
+    if (hubStop)  addMarker(hubStop.lat,  hubStop.lng,  '환승', '#FF8C00');
+    if (toStop)   addMarker(toStop.lat,   toStop.lng,   '도착', '#E24B4A');
+
+  } else {
+    // 직행: fromStop → toStop 구간 추출
+    const coords = (result.coords || getRouteCoords(result.route) || []).filter(c => c.lat);
+    let seg = coords;
+    if (fromStop && toStop && coords.length > 0) {
+      let fi=0,fd=9999999,ti=coords.length-1,td=9999999;
+      coords.forEach((c,i) => {
+        const df=Math.sqrt((c.lat-fromStop.lat)**2+(c.lng-fromStop.lng)**2)*111000;
+        const dt=Math.sqrt((c.lat-toStop.lat)**2+(c.lng-toStop.lng)**2)*111000;
+        if(df<fd){fd=df;fi=i;} if(dt<td){td=dt;ti=i;}
+      });
+      if(fi>ti){const t=fi;fi=ti;ti=t;}
+      seg = coords.slice(fi, ti+1);
+    }
+
+    drawPoly(seg, color1, road => {
+      const rb = new kakao.maps.LatLngBounds();
+      road.forEach(p => rb.extend(p));
+      mapDetail.setBounds(rb, 80);
+    });
+
+    // 중간 정류장 점
+    seg.forEach((c,i) => {
+      if (i===0 || i===seg.length-1) return;
+      new kakao.maps.CustomOverlay({
+        position: new kakao.maps.LatLng(c.lat,c.lng),
+        content: `<div style="width:6px;height:6px;background:${color1};border:1.5px solid #fff;border-radius:50%;opacity:0.7"></div>`,
+        yAnchor:0.5, zIndex:3
+      }).setMap(mapDetail);
+    });
+
+    if (fromStop) addMarker(fromStop.lat, fromStop.lng, '출발', '#185FA5');
+    if (toStop)   addMarker(toStop.lat,   toStop.lng,   '도착', '#E24B4A');
+
+    // 초기 범위 조정 (도로 경로 오기 전)
+    const bounds = new kakao.maps.LatLngBounds();
+    if (fromStop) bounds.extend(new kakao.maps.LatLng(fromStop.lat, fromStop.lng));
+    if (toStop)   bounds.extend(new kakao.maps.LatLng(toStop.lat,   toStop.lng));
+    if (fromStop || toStop) mapDetail.setBounds(bounds, 80);
   }
-
-  // 중간 정류장 점도 같은 색
-  segCoords.forEach((c, i) => {
-    if (i === 0 || i === segCoords.length - 1) return;
-    new kakao.maps.CustomOverlay({
-      position: new kakao.maps.LatLng(c.lat, c.lng),
-      content: `<div style="width:6px;height:6px;background:${lineColor};border:1.5px solid #fff;border-radius:50%;opacity:0.7"></div>`,
-      yAnchor: 0.5, zIndex: 3
-    }).setMap(mapDetail);
-  });
-
-  // 출발/도착 마커
-  if (fromStop) addMarker(fromStop.lat, fromStop.lng, '출발', '#185FA5');
-  if (toStop)   addMarker(toStop.lat,   toStop.lng,   '도착', '#E24B4A');
-  // 환승지 마커
-  if (result.isTransfer && result.transferHub) {
-    const hubStop2 = STOPS.find(s => s.name === result.transferHub || s.displayName === result.transferHub);
-    if (hubStop2) addMarker(hubStop2.lat, hubStop2.lng, '환승', '#FF8C00');
-  }
-
-  // 지도 범위 조정
-  const bounds = new kakao.maps.LatLngBounds();
-  if (fromStop) bounds.extend(new kakao.maps.LatLng(fromStop.lat, fromStop.lng));
-  if (toStop)   bounds.extend(new kakao.maps.LatLng(toStop.lat,   toStop.lng));
-  if (fromStop || toStop) mapDetail.setBounds(bounds, 80);
 }
+
 
 // 노선도 뒤로가기 — 시간표에서 왔으면 시간표로, 아니면 홈으로
 function routesBack() {
