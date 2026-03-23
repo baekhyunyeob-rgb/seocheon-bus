@@ -71,7 +71,7 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
   const passing = [];
   APP.routes.forEach(route => {
     const coords = getRouteCoords(route);
-    const idx = nearestCoordIdx(coords, Number(lat), Number(lng), 500);
+    const idx = exactCoordIdx(coords, Number(lat), Number(lng));
     if (idx === -1) return;
 
     // 탑승 가능한 다음 버스 시각 추정

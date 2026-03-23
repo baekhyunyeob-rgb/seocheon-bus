@@ -29,21 +29,19 @@
       <div class="sheet-handle"></div>
       <!-- 출발지 -->
       <div class="loc-row">
-        <div class="loc-track">
-          <div class="loc-dot dot-start"></div>
-          <div class="loc-vline loc-swap" onclick="swapFromTo()" title="출발/도착 교환"></div>
-        </div>
+        <div class="loc-dot dot-start"></div>
         <div class="loc-input" id="input-from" onclick="openPlaceSearch('from')">
           <span class="loc-text" id="text-from">현위치</span>
           <span class="loc-tag tag-gps" id="tag-from">GPS</span>
         </div>
       </div>
+      <!-- 교환 화살표 -->
+      <div class="loc-arrow-row" onclick="swapFromTo()" title="출발/도착 교환">
+        <div class="loc-vline"></div>
+      </div>
       <!-- 경유지 (기본 숨김) -->
       <div class="loc-row" id="via-row" style="display:none">
-        <div class="loc-track">
-          <div class="loc-dot dot-via"></div>
-          <div class="loc-vline"></div>
-        </div>
+        <div class="loc-dot dot-via"></div>
         <div class="loc-input" id="input-via" onclick="openPlaceSearch('via')">
           <span class="loc-text" id="text-via">경유지 입력</span>
           <span class="loc-tag tag-via">경유</span>
@@ -51,9 +49,7 @@
       </div>
       <!-- 도착지 -->
       <div class="loc-row">
-        <div class="loc-track">
-          <div class="loc-dot dot-end"></div>
-        </div>
+        <div class="loc-dot dot-end"></div>
         <div class="loc-input" id="input-to" onclick="openPlaceSearch('to')">
           <span class="loc-text loc-placeholder" id="text-to">도착지 입력 또는 선택</span>
         </div>

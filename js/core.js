@@ -39,7 +39,7 @@ const SEOCHEON_BOUNDS = { minLat:35.97, maxLat:36.22, minLng:126.49, maxLng:126.
 async function loadData() {
   try {
     const [rRes, sRes] = await Promise.all([
-      fetch('data/routes_fixed.json'),
+      fetch('data/routes_enhanced.json'),
       fetch('data/stops.json'),
     ]);
     const rawRoutes = await rRes.json();
@@ -83,32 +83,27 @@ async function loadData() {
 // ── 노선 좌표 사전 구축 ────────────────────────────────────────
 function buildRouteCoords() {
   APP.routes.forEach(route => {
-    const via = route['경유'] || '';
-    const names = [route['기점']];
-    via.replace(/[()]/g, '').split(/→|↔|,/).forEach(s => {
-      const t = s.trim(); if (t) names.push(t);
-    });
-    names.push(route['종점']);
+    let coords;
 
-    const coords = names.map(name => {
-      const s = APP.stopMap[name];
-      return s ? { name, lat: s.lat, lng: s.lng } : { name, lat: null, lng: null };
-    });
-
-    // 좌표 없는 정류장 보간
-    for (let i = 0; i < coords.length; i++) {
-      if (!coords[i].lat) {
-        const prev = coords.slice(0, i).reverse().find(c => c.lat);
-        const next = coords.slice(i + 1).find(c => c.lat);
-        if (prev && next) {
-          coords[i].lat = (prev.lat + next.lat) / 2;
-          coords[i].lng = (prev.lng + next.lng) / 2;
-        } else if (prev) {
-          coords[i].lat = prev.lat; coords[i].lng = prev.lng;
-        } else if (next) {
-          coords[i].lat = next.lat; coords[i].lng = next.lng;
-        }
-      }
+    // routes_enhanced의 _stops가 있으면 우선 사용 (snap된 완성 노선)
+    if (route['_stops'] && route['_stops'].length >= 2) {
+      coords = route['_stops'].map(s => ({
+        name: s.name, lat: s.lat, lng: s.lng
+      }));
+    } else {
+      // fallback: 원본 경유지에서 매칭된 정류장만 사용
+      const via = route['경유'] || '';
+      const names = [route['기점']];
+      via.replace(/[()]/g, '').split(/→|↔|,/).forEach(s => {
+        const t = s.trim(); if (t) names.push(t);
+      });
+      names.push(route['종점']);
+      coords = names
+        .map(name => {
+          const s = APP.stopMap[name];
+          return s ? { name, lat: s.lat, lng: s.lng } : null;
+        })
+        .filter(c => c !== null); // 미매칭 제거 (보간 없음)
     }
 
     APP.routeCoords.set(`${route['번호']}_${route['기점']}`, coords);
@@ -251,8 +246,33 @@ function nearestStop(lat, lng, maxDistM = 500) {
   return best;
 }
 
-// ── 노선 coords에서 좌표와 가장 가까운 인덱스 ─────────────────
-function nearestCoordIdx(coords, lat, lng, thresholdM = 1500) {
+// ── 동일 이름 정류장 대표 좌표 (100m 이내 통합) ──────────────
+function getRepresentativeCoord(name) {
+  const candidates = APP.stops.filter(s => s.name === name);
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0];
+  // 100m 이내는 같은 정류장으로 보고 첫 번째 반환
+  const base = candidates[0];
+  const nearby = candidates.filter(s =>
+    coordDist(s.lat, s.lng, base.lat, base.lng) <= 100
+  );
+  return nearby.length >= 1 ? base : null; // 모두 100m 이내면 대표 하나
+}
+
+// ── 노선 coords에서 정확한 좌표 매칭 (허용거리 없음) ──────────
+// 출발지/도착지용 — stops DB 좌표와 정확히 일치하는 인덱스
+function exactCoordIdx(coords, lat, lng) {
+  let best = -1, bestD = 50; // 50m 이내만 허용 (GPS 오차 수준)
+  coords.forEach((c, i) => {
+    if (!c.lat) return;
+    const d = coordDist(c.lat, c.lng, lat, lng);
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+
+// ── 노선 coords에서 가장 가까운 인덱스 (환승/허브용, 300m) ────
+function nearestCoordIdx(coords, lat, lng, thresholdM = 300) {
   let best = -1, bestD = thresholdM;
   coords.forEach((c, i) => {
     if (!c.lat) return;

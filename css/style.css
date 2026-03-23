@@ -86,17 +86,20 @@ html, body {
 .loc-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 10px;
+  margin-bottom: 0;
 }
 
-.loc-track {
+/* 화살표 행 — dot과 같은 x축, 두 입력창 사이 */
+.loc-arrow-row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  flex-shrink: 0;
-  width: 20px;  /* 고정 너비 — 모든 행에서 동일 */
+  padding: 2px 0;
+  cursor: pointer;
+  /* dot 너비(11px) 의 절반 - vline 너비(2px)의 절반 = 4.5px 들여쓰기 */
+  padding-left: 4.5px;
 }
+.loc-arrow-row:active { opacity: 0.6; }
 
 .loc-dot {
   width: 11px; height: 11px;
@@ -109,10 +112,10 @@ html, body {
 
 .loc-vline {
   width: 2px;
-  height: 20px;
+  height: 16px;
   background: var(--blue);
   position: relative;
-  cursor: pointer;
+  flex-shrink: 0;
 }
 /* 위 화살표 (↑) */
 .loc-vline::before {
@@ -138,7 +141,6 @@ html, body {
   border-right: 4px solid transparent;
   border-top: 5px solid var(--blue);
 }
-.loc-vline:active { opacity: 0.6; }
 
 .loc-input {
   flex: 1;
@@ -805,6 +807,16 @@ html, body {
   padding: 6px 0;
   -webkit-overflow-scrolling: touch;
 }
+.place-item {
+  padding: 11px 16px;
+  cursor: pointer;
+  border-bottom: 0.5px solid #f5f5f5;
+  font-size: 14px;
+  color: var(--text);
+}
+.place-item:active { background: #f0f7f5; }
+.place-name { font-size: 14px; color: var(--text); font-weight: 500; }
+.place-empty { padding: 20px 16px; font-size: 13px; color: #bbb; text-align: center; }
 .modal-section-label {
   font-size: 10px;
   font-weight: 700;

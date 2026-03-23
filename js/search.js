@@ -33,11 +33,12 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     if (coords.length < 2) return;
 
     // 도착지 인덱스
-    const toIdx = nearestCoordIdx(coords, toLat, toLng, 800);
+    // 도착지: 정확한 좌표 매칭 (허용거리 없음)
+    const toIdx = exactCoordIdx(coords, toLat, toLng);
     if (toIdx === -1) return;
 
-    // 출발지 인덱스
-    const fromIdx = nearestCoordIdx(coords, fromLat, fromLng, 1500);
+    // 출발지: 정확한 좌표 매칭 (허용거리 없음)
+    const fromIdx = exactCoordIdx(coords, fromLat, fromLng);
     if (fromIdx === -1) return;
     if (fromIdx >= toIdx) return; // 방향 불일치
 
@@ -48,11 +49,15 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     // 소요시간: 좌표 비율 기반
     const travelMin = segTravelMin(route, coords, fromIdx, toIdx);
 
+    const fromStopName = coords[fromIdx]?.name || '';
+    const toStopName   = coords[toIdx]?.name   || '';
     results.push({
       type: 'direct',
       route,
       fromIdx,
       toIdx,
+      fromStopName,
+      toStopName,
       boardMin,
       boardTime: minToTime(boardMin),
       travelMin,
@@ -76,9 +81,11 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     APP.routes.forEach(r1 => {
       const c1 = getRouteCoords(r1);
       if (c1.length < 2) return;
-      const hubIdx1 = nearestCoordIdx(c1, hubLat, hubLng, 800);
+      // 허브: 300m 이내 (걸어서 이동 가능)
+      const hubIdx1 = nearestCoordIdx(c1, hubLat, hubLng, 300);
       if (hubIdx1 === -1) return;
-      const fromIdx1 = nearestCoordIdx(c1, fromLat, fromLng, 1500);
+      // 출발지: 정확한 좌표 매칭
+      const fromIdx1 = exactCoordIdx(c1, fromLat, fromLng);
       if (fromIdx1 === -1 || fromIdx1 >= hubIdx1) return;
       const boardMin1 = estimateBoardMin(r1, c1, fromIdx1, baseMin, dayType);
       if (boardMin1 === null) return;
@@ -91,9 +98,11 @@ function findRoutes(fromName, toName, searchTime, dayType) {
     APP.routes.forEach(r2 => {
       const c2 = getRouteCoords(r2);
       if (c2.length < 2) return;
-      const hubIdx2 = nearestCoordIdx(c2, hubLat, hubLng, 800);
+      // 허브: 300m 이내
+      const hubIdx2 = nearestCoordIdx(c2, hubLat, hubLng, 300);
       if (hubIdx2 === -1) return;
-      const toIdx2 = nearestCoordIdx(c2, toLat, toLng, 800);
+      // 도착지: 정확한 좌표 매칭
+      const toIdx2 = exactCoordIdx(c2, toLat, toLng);
       if (toIdx2 === -1 || hubIdx2 >= toIdx2) return;
 
       // 이 2구간의 버스 시각들
@@ -236,7 +245,7 @@ function getStopNames(route) {
     const t = s.trim(); if (t) names.push(t);
   });
   names.push(route['종점']);
-  return [...new Set(names)]; // 순환선 중복 제거
+  return names; // 중복 제거 안 함 — coords와 1:1 대응 유지
 }
 
 // ── 복귀 경로 탐색 ─────────────────────────────────────────────
