@@ -903,3 +903,79 @@ html, body {
 .tr-dest { font-size: 12px; color: #444; }
 .tr-via { font-size: 10px; color: #aaa; }
 .tr-grade { font-size: 10px; color: #888; text-align: right; }
+
+/* ── 통일된 정류장 행 ── */
+.stop-right {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+/* ── 경로 카드 통일 ── */
+.rc-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.rc-times {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.rc-depart  { color: #185FA5; font-weight: 700; }
+.rc-arrive  { color: #E24B4A; font-weight: 700; }
+.rc-sep     { color: #ccc; font-size: 11px; }
+.rc-hub     { color: #FF8C00; font-size: 11px; font-weight: 600; }
+.rc-transfer-info { color: #FF8C00; font-size: 11px; }
+.rc-duration { color: #888; font-size: 11px; margin-left: auto; }
+.rc-route-summary { font-size: 11px; color: #444; }
+.rc-arrow { color: #aaa; font-size: 11px; }
+
+/* ── 버스 시간표 카드 ── */
+.tt-card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 8px 12px;
+}
+.tt-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.tt-dir { flex: 1; font-size: 11px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-wait { font-size: 11px; color: #1D9E75; font-weight: 600; flex-shrink: 0; }
+.tt-wait.soon { color: #E24B4A; }
+.tt-card-time { display: flex; align-items: baseline; gap: 4px; margin-bottom: 4px; }
+.tt-next-time  { font-size: 22px; font-weight: 800; color: #185FA5; }
+.tt-next-label { font-size: 11px; color: #185FA5; }
+
+/* ── 즐겨찾기 태그 색상 ── */
+.pat-from { background: #E6F1FB; color: #185FA5; }
+.pat-to   { background: #FDECEA; color: #E24B4A; }
+.pat-del  { background: #fff; border: 1px solid #eee; color: #ccc; }
+
+/* ── 탭바 숨김 ── */
+.tabbar { transition: transform 0.25s ease; }
+.tabbar.hide { transform: translateY(100%); }
+
+/* ── 정류장 검색 ── */
+.stop-search-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 0.5px solid #f5f5f5;
+  cursor: pointer;
+  font-size: 13px;
+}
+.stop-search-item:hover { background: #f8f9fa; }
+.stop-search-icon { font-size: 14px; }
+.stop-search-empty { padding: 20px; text-align: center; color: #aaa; font-size: 13px; }
