@@ -1,258 +1,229 @@
-// ================================================================
-// search.js — 경로 탐색 (직행 + 환승)
-// ================================================================
+'use strict';
 
-// ── 환승 허브 목록 ─────────────────────────────────────────────
+// ==================== 경로 검색 ====================
+
 const TRANSFER_HUBS = [
-  '서천터미널', '장항터미널', '한산공용터미널',
-  '서천역', '장항읍행정복지센터', '판교정류소.판교삼거리',
-  '기산면행정복지센터', '문산정류소',
-  '화양면행정복지센터', '비인면행정복지센터',
-  '마산리', '시초면행정복지센터.시초초등학교',
-  '광암삼거리', '구동리입구',
+  '서천터미널','장항터미널','한산공용터미널',
+  '서천역','장항읍내','판교','기산','문산',
+  '화양','비인','마산','시초','광암',
 ];
 
-// ── 메인 경로 탐색 ─────────────────────────────────────────────
-function findRoutes(fromName, toName, searchTime, dayType) {
-  const results = [];
-  const baseMin = searchTime.getHours() * 60 + searchTime.getMinutes();
+function searchRoutes(fromState, toState, searchTime) {
+  const dayType   = getDayType();
+  const baseMin   = searchTime.getHours()*60 + searchTime.getMinutes();
+  const results   = [];
 
-  // 출발지/도착지 정류장
-  const fromStop = findStop(fromName);
-  const toStop   = findStop(toName);
-  if (!toStop) return [];
+  // 출발/도착 좌표
+  const fromLat = fromState?.isGps ? STATE.myLocation.lat : fromState?.lat;
+  const fromLng = fromState?.isGps ? STATE.myLocation.lng : fromState?.lng;
+  const toLat   = toState?.lat;
+  const toLng   = toState?.lng;
 
-  const fromLat = fromStop?.lat || APP.myLocation.lat;
-  const fromLng = fromStop?.lng || APP.myLocation.lng;
-  const toLat   = toStop.lat;
-  const toLng   = toStop.lng;
+  if (!toLat) return [];
 
-  // ── 직행 탐색 ──────────────────────────────────────────────
-  APP.routes.forEach(route => {
+  const toCoords   = getNearbyCoords(toLat, toLng, 300);
+  const fromCoords = (fromLat && !fromState?.isGps) ? getNearbyCoords(fromLat, fromLng, 300) : null;
+
+  // ── 직행 탐색 ──
+  for (const route of ROUTES) {
     const coords = getRouteCoords(route);
-    if (coords.length < 2) return;
+    if (!coords.length) continue;
 
-    // 도착지 인덱스
-    // 도착지: 정확한 좌표 매칭 (허용거리 없음)
-    const toIdx = exactCoordIdx(coords, toLat, toLng);
-    if (toIdx === -1) return;
+    const toIdx = findSnapIdxMulti(coords, toCoords, 500);
+    if (toIdx === -1) continue;
 
-    // 출발지: 정확한 좌표 매칭 (허용거리 없음)
-    const fromIdx = exactCoordIdx(coords, fromLat, fromLng);
-    if (fromIdx === -1) return;
-    if (fromIdx >= toIdx) return; // 방향 불일치
+    let fromIdx = -1;
+    if (fromLat) {
+      fromIdx = fromCoords
+        ? findSnapIdxMulti(coords, fromCoords, 1500)
+        : findSnapIdx(coords, fromLat, fromLng, 1500);
+    }
+    if (!fromState?.isGps && fromIdx === -1) continue;
+    if (fromIdx !== -1 && fromIdx >= toIdx) continue;
 
-    // 탑승 시각 (출발지 통과 시각 추정)
-    const boardMin = estimateBoardMin(route, coords, fromIdx, baseMin, dayType);
-    if (boardMin === null) return; // 막차 지남
+    const nextMin = getNextBusMin(route, baseMin, dayType);
+    if (nextMin === null) continue;
 
-    // 소요시간: 좌표 비율 기반
-    const travelMin = segTravelMin(route, coords, fromIdx, toIdx);
+    const fromC = (fromIdx>=0&&coords[fromIdx]) ? coords[fromIdx] : (fromLat?{lat:fromLat,lng:fromLng}:null);
+    const toC   = coords[toIdx];
+    const segKm = (fromC?.lat&&toC?.lat) ? distM(fromC.lat,fromC.lng,toC.lat,toC.lng)/1000 : (route['거리']||10);
+    const mins  = Math.round(segKm*2.5+3);
 
-    const fromStopName = coords[fromIdx]?.name || '';
-    const toStopName   = coords[toIdx]?.name   || '';
     results.push({
       type: 'direct',
-      route,
-      fromIdx,
-      toIdx,
-      fromStopName,
-      toStopName,
-      boardMin,
-      boardTime: minToTime(boardMin),
-      travelMin,
-      arriveMin: boardMin + travelMin,
-      arriveTime: minToTime(boardMin + travelMin),
-      waitMin: boardMin - baseMin,
-      totalMin: (boardMin - baseMin) + travelMin,
-      dayType,
+      route, coords,
+      nextMin,
+      boardMin: nextMin,
+      arriveMin: nextMin + mins,
+      minutes: mins,
+      fromIdx, toIdx, dayType,
     });
-  });
-
-  // ── 환승 탐색 ──────────────────────────────────────────────
-  TRANSFER_HUBS.forEach(hubName => {
-    const hubStop = findStop(hubName);
-    if (!hubStop) return;
-
-    const hubLat = hubStop.lat, hubLng = hubStop.lng;
-
-    // 출발지→허브 1구간 노선
-    const leg1Routes = [];
-    APP.routes.forEach(r1 => {
-      const c1 = getRouteCoords(r1);
-      if (c1.length < 2) return;
-      // 허브: 300m 이내 (걸어서 이동 가능)
-      const hubIdx1 = nearestCoordIdx(c1, hubLat, hubLng, 300);
-      if (hubIdx1 === -1) return;
-      // 출발지: 정확한 좌표 매칭
-      const fromIdx1 = exactCoordIdx(c1, fromLat, fromLng);
-      if (fromIdx1 === -1 || fromIdx1 >= hubIdx1) return;
-      const boardMin1 = estimateBoardMin(r1, c1, fromIdx1, baseMin, dayType);
-      if (boardMin1 === null) return;
-      const travel1 = segTravelMin(r1, c1, fromIdx1, hubIdx1);
-      leg1Routes.push({ route: r1, coords: c1, fromIdx: fromIdx1, hubIdx: hubIdx1, boardMin: boardMin1, travel: travel1 });
-    });
-    if (!leg1Routes.length) return;
-
-    // 허브→도착지 2구간 노선
-    APP.routes.forEach(r2 => {
-      const c2 = getRouteCoords(r2);
-      if (c2.length < 2) return;
-      // 허브: 300m 이내
-      const hubIdx2 = nearestCoordIdx(c2, hubLat, hubLng, 300);
-      if (hubIdx2 === -1) return;
-      // 도착지: 정확한 좌표 매칭
-      const toIdx2 = exactCoordIdx(c2, toLat, toLng);
-      if (toIdx2 === -1 || hubIdx2 >= toIdx2) return;
-
-      // 이 2구간의 버스 시각들
-      const busMins2 = allBusMins(r2, dayType);
-      if (!busMins2.length) return;
-
-      // 각 1구간 후보와 매칭
-      leg1Routes.forEach(l1 => {
-        const hubArrMin = l1.boardMin + l1.travel; // 허브 도착 시각
-
-        // 허브 도착 후 탈 수 있는 2구간 첫 버스
-        const bus2Min = busMins2.find(t => t >= hubArrMin + 3); // 3분 환승 여유
-        if (!bus2Min) return;
-
-        // 탑승지 통과 시각으로 조정
-        const leg2TravelMin = segTravelMin(r2, c2, hubIdx2, toIdx2);
-        const boardMin2Adj = adjustBoardMin(r2, c2, hubIdx2, bus2Min);
-
-        // 중복 제거
-        const dup = results.find(x =>
-          x.type === 'transfer' &&
-          x.route['번호'] === l1.route['번호'] &&
-          x.route2['번호'] === r2['번호']
-        );
-        if (dup) return;
-
-        results.push({
-          type: 'transfer',
-          route: l1.route,
-          route2: r2,
-          fromIdx: l1.fromIdx,
-          toIdx: toIdx2,
-          boardMin: l1.boardMin,
-          boardTime: minToTime(l1.boardMin),
-          hubName,
-          hubStop,
-          hubArrMin,
-          hubArrTime: minToTime(hubArrMin),
-          bus2Min: boardMin2Adj,
-          bus2Time: minToTime(boardMin2Adj),
-          travelMin: l1.travel + leg2TravelMin,
-          arriveMin: boardMin2Adj + leg2TravelMin,
-          arriveTime: minToTime(boardMin2Adj + leg2TravelMin),
-          waitMin: l1.boardMin - baseMin,
-          totalMin: (boardMin2Adj + leg2TravelMin) - baseMin,
-          dayType,
-        });
-      });
-    });
-  });
-
-  return rankResults(results, baseMin);
-}
-
-// ── 결과 정렬 및 추천 선정 ─────────────────────────────────────
-function rankResults(results, baseMin) {
-  if (!results.length) return [];
-
-  // 정렬: 총소요(대기+이동) → 환승횟수 → 이동시간
-  results.sort((a, b) => {
-    if (a.totalMin !== b.totalMin) return a.totalMin - b.totalMin;
-    const ta = a.type === 'transfer' ? 1 : 0;
-    const tb = b.type === 'transfer' ? 1 : 0;
-    if (ta !== tb) return ta - tb;
-    return a.travelMin - b.travelMin;
-  });
-
-  // 중복 제거 (같은 노선 다른 시간대)
-  const seen = new Set();
-  const unique = results.filter(r => {
-    const key = r.type === 'transfer'
-      ? `${r.route['번호']}+${r.route2['번호']}+${r.boardMin}`
-      : `${r.route['번호']}+${r.boardMin}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  // 직행이 있으면 최대 6개, 없으면 환승 최대 4개
-  const directs  = unique.filter(r => r.type === 'direct');
-  const transfers = unique.filter(r => r.type === 'transfer');
-
-  if (directs.length) {
-    return [...directs.slice(0, 4), ...transfers.slice(0, 2)].slice(0, 6);
   }
-  return transfers.slice(0, 4);
+
+  // ── 환승 탐색 ──
+  const ck = getCountKey(dayType);
+
+  for (const hubName of TRANSFER_HUBS) {
+    const hubStop = STOPS.find(s => s.name.includes(hubName.substring(0,3)));
+    if (!hubStop) continue;
+    const { lat:hLat, lng:hLng } = hubStop;
+
+    // 허브 방향 체크 (되돌아가는 허브 제거)
+    if (fromLat && toLat) {
+      if (distM(hLat,hLng,toLat,toLng) >= distM(fromLat,fromLng,toLat,toLng)) continue;
+    }
+
+    // 1구간 후보: from → hub
+    const leg1 = ROUTES.filter(r => {
+      const c = getRouteCoords(r);
+      const hi = findSnapIdx(c, hLat, hLng, 1000);
+      if (hi === -1) return false;
+      if (!fromLat) return true;
+      const fi = fromCoords ? findSnapIdxMulti(c, fromCoords, 1500) : findSnapIdx(c, fromLat, fromLng, 1500);
+      return (fromState?.isGps || fi !== -1) && (fi === -1 || fi < hi) && (r[ck] > 0);
+    });
+
+    // 2구간 후보: hub → to
+    const leg2 = ROUTES.filter(r => {
+      const c = getRouteCoords(r);
+      const hi = findSnapIdx(c, hLat, hLng, 1000);
+      const ti = findSnapIdxMulti(c, toCoords, 500);
+      return hi !== -1 && ti !== -1 && hi < ti && (r[ck] > 0);
+    });
+
+    if (!leg1.length || !leg2.length) continue;
+
+    // 2구간 각각에 대해 1구간 매칭
+    for (const r2 of leg2) {
+      const c2     = getRouteCoords(r2);
+      const r2hub  = findSnapIdx(c2, hLat, hLng, 1000);
+      const r2to   = findSnapIdxMulti(c2, toCoords, 500);
+      const leg2km = (c2[r2hub]&&c2[r2to]) ? distM(c2[r2hub].lat,c2[r2hub].lng,c2[r2to].lat,c2[r2to].lng)/1000 : 5;
+      const leg2min= Math.round(leg2km*2.5+3);
+
+      const r2times = getRouteTimes(r2, dayType).filter(t=>t>=baseMin);
+      if (!r2times.length) continue;
+
+      for (const r1 of leg1) {
+        const c1    = getRouteCoords(r1);
+        const r1hub = findSnapIdx(c1, hLat, hLng, 1000);
+        const r1fr  = fromLat ? (fromCoords ? findSnapIdxMulti(c1, fromCoords, 1500) : findSnapIdx(c1, fromLat, fromLng, 1500)) : 0;
+        if (r1hub === -1) continue;
+
+        const leg0km = (r1fr>0&&c1[0]&&c1[r1fr]) ? distM(c1[0].lat,c1[0].lng,c1[r1fr].lat,c1[r1fr].lng)/1000 : 0;
+        const leg1km = (c1[r1fr]&&c1[r1hub]) ? distM(c1[r1fr]?.lat||0,c1[r1fr]?.lng||0,c1[r1hub].lat,c1[r1hub].lng)/1000 : 3;
+        const leg0min= Math.round(leg0km*2.5);
+        const leg1min= Math.round(leg1km*2.5+3);
+
+        const r1times = getRouteTimes(r1, dayType);
+
+        for (const bus2dep of r2times) {
+          const needHubBy = bus2dep - 5; // 환승까지 5분 여유
+
+          let bestBus1 = null;
+          for (const dep of r1times) {
+            const boardMin  = dep + leg0min;
+            if (boardMin < baseMin) continue;
+            const hubArrMin = boardMin + leg1min;
+            if (hubArrMin <= needHubBy) { bestBus1 = { dep, boardMin, hubArrMin }; break; }
+          }
+          if (!bestBus1) continue;
+
+          const hub2boardMin = bus2dep; // 2구간 실제 탑승
+          const arriveMin    = hub2boardMin + leg2min;
+          const totalMin     = arriveMin - bestBus1.boardMin;
+
+          const dup = results.some(res =>
+            res.type === 'transfer' &&
+            res.route['번호'] === r1['번호'] &&
+            res.route2['번호'] === r2['번호'] &&
+            res.nextMin === bestBus1.dep
+          );
+          if (dup) continue;
+
+          results.push({
+            type: 'transfer',
+            route: r1, route2: r2,
+            coords: c1, coords2: c2,
+            nextMin: bestBus1.dep,
+            boardMin: bestBus1.boardMin,
+            hubArrMin: bestBus1.hubArrMin,
+            hub2BoardMin: hub2boardMin,
+            arriveMin,
+            minutes: totalMin,
+            transferHub: hubName,
+            dayType,
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // ── 정렬 ──
+  results.sort((a, b) => {
+    // 직행 우선 (단, 직행 대기 > 환승 대기 + 30분이면 환승 우선)
+    if (a.type !== b.type) {
+      const directWait  = a.type==='direct' ? a.boardMin : b.boardMin;
+      const transferWait= a.type==='direct' ? b.boardMin : a.boardMin;
+      if (directWait - transferWait > 30) return a.type==='direct' ? 1 : -1;
+      return a.type==='direct' ? -1 : 1;
+    }
+    if (Math.abs(a.boardMin - b.boardMin) > 3) return a.boardMin - b.boardMin;
+    return a.minutes - b.minutes;
+  });
+
+  return results.slice(0, 3);
 }
 
-// ── 탑승 시각 추정 ─────────────────────────────────────────────
-// 기점 출발 시각 + 기점→탑승지 비례 시간
-function estimateBoardMin(route, coords, fromIdx, baseMin, dayType) {
-  const leg0Min = segTravelMin(route, coords, 0, fromIdx);
-  const bMin = nextBusMinFromOrigin(route, dayType, baseMin - leg0Min);
-  if (bMin === null) return null;
-  return bMin + leg0Min;
-}
+// 복귀 경로 찾기
+function findReturnRoute(toState, fromState, baseMin, dayType) {
+  const retFromLat = toState?.lat, retFromLng = toState?.lng;
+  const retToLat   = fromState?.isGps ? STATE.myLocation.lat : fromState?.lat;
+  const retToLng   = fromState?.isGps ? STATE.myLocation.lng : fromState?.lng;
+  if (!retFromLat || !retToLat) return null;
 
-// 기점 기준 다음 버스 (분)
-function nextBusMinFromOrigin(route, dayType, baseMin) {
-  const key = dayType === 'weekday' ? '평일횟수'
-             : dayType === 'sat'    ? '토요일횟수' : '공휴일횟수';
-  const count = Number(route[key]) || 0;
-  if (!count || !route['첫차'] || !route['막차']) return null;
-  const fMin = timeToMin(route['첫차']);
-  const lMin = timeToMin(route['막차']);
-  if (fMin < 0 || lMin < 0) return null;
-  const interval = count > 1 ? Math.round((lMin - fMin) / (count - 1)) : 0;
-  for (let i = 0; i < count; i++) {
-    const t = fMin + interval * i;
-    if (t >= baseMin) return t;
+  const ck = getCountKey(dayType);
+  const retFromCoords = getNearbyCoords(retFromLat, retFromLng, 300);
+  const retToCoords   = getNearbyCoords(retToLat, retToLng, 300);
+
+  // 직행
+  const directs = ROUTES.filter(r => {
+    const c = getRouteCoords(r);
+    const fi = findSnapIdxMulti(c, retFromCoords, 300);
+    const ti = findSnapIdxMulti(c, retToCoords, 300);
+    return fi !== -1 && ti !== -1 && fi < ti && (r[ck]>0);
+  });
+  if (directs.length) {
+    directs.sort((a,b)=>(b[ck]||0)-(a[ck]||0));
+    const r = directs[0];
+    const nextMin = getNextBusMin(r, baseMin, dayType);
+    return nextMin !== null ? { type:'direct', route:r, nextMin } : null;
+  }
+
+  // 환승
+  for (const hubName of TRANSFER_HUBS) {
+    const hs = STOPS.find(s=>s.name.includes(hubName.substring(0,3)));
+    if (!hs) continue;
+    const leg1 = ROUTES.filter(r=>{
+      const c=getRouteCoords(r);
+      const hi=findSnapIdx(c,hs.lat,hs.lng,1000);
+      const fi=findSnapIdxMulti(c,retFromCoords,300);
+      return fi!==-1&&hi!==-1&&fi<hi&&(r[ck]>0);
+    });
+    const leg2 = ROUTES.filter(r=>{
+      const c=getRouteCoords(r);
+      const hi=findSnapIdx(c,hs.lat,hs.lng,1000);
+      const ti=findSnapIdxMulti(c,retToCoords,300);
+      return hi!==-1&&ti!==-1&&hi<ti&&(r[ck]>0);
+    });
+    if (leg1.length && leg2.length) {
+      leg1.sort((a,b)=>(b[ck]||0)-(a[ck]||0));
+      leg2.sort((a,b)=>(b[ck]||0)-(a[ck]||0));
+      const r1=leg1[0], r2=leg2[0];
+      const nextMin=getNextBusMin(r1,baseMin,dayType);
+      return nextMin!==null ? { type:'transfer', route:r1, route2:r2, nextMin, transferHub:hubName } : null;
+    }
   }
   return null;
-}
-
-// 2구간 탑승지 통과 시각 조정 (허브 출발 시각 + 허브→탑승지 시간)
-function adjustBoardMin(route, coords, hubIdx, busOriginMin) {
-  const leg = segTravelMin(route, coords, 0, hubIdx);
-  return busOriginMin + leg;
-}
-
-// ── 구간 소요시간 추정 (좌표 비율 기반) ───────────────────────
-function segTravelMin(route, coords, startIdx, endIdx) {
-  const s = Math.max(0, startIdx);
-  const e = Math.min(endIdx, coords.length - 1);
-  if (s >= e) return 2;
-  const cs = coords[s], ce = coords[e];
-  if (cs?.lat && ce?.lat) {
-    const km = coordDist(cs.lat, cs.lng, ce.lat, ce.lng) / 1000;
-    return Math.max(2, Math.round(km * 2.5 + 2));
-  }
-  const ratio = (e - s) / Math.max(coords.length - 1, 1);
-  return Math.max(2, Math.round(routeTotalMin(route) * ratio));
-}
-
-// ── 정류장 목록 추출 ───────────────────────────────────────────
-function getStopNames(route) {
-  const via = route['경유'] || '';
-  const names = [route['기점']];
-  via.replace(/[()]/g, '').split(/→|↔|,/).forEach(s => {
-    const t = s.trim(); if (t) names.push(t);
-  });
-  names.push(route['종점']);
-  return names; // 중복 제거 안 함 — coords와 1:1 대응 유지
-}
-
-// ── 복귀 경로 탐색 ─────────────────────────────────────────────
-function findReturnRoute(toName, fromName, baseMin, dayType) {
-  const results = findRoutes(toName, fromName, {
-    getHours: () => Math.floor(baseMin / 60),
-    getMinutes: () => baseMin % 60,
-  }, dayType);
-  return results[0] || null;
 }

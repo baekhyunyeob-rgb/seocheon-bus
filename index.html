@@ -6,72 +6,72 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="대중교통">
+<meta name="apple-mobile-web-app-title" content="서천버스">
 <meta name="theme-color" content="#1D9E75">
 <title>슬기로운 대중교통 생활</title>
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚌</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-<!-- 앱 래퍼 -->
 <div id="app">
 
   <!-- ==================== 홈 화면 ==================== -->
   <div id="screen-home" class="screen active">
-    <div id="map-home" class="map-container"></div>
-    <div id="out-of-area-notice" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(0,0,0,0.7);color:#fff;border-radius:20px;padding:7px 16px;font-size:12px;font-weight:600;align-items:center;gap:6px;white-space:nowrap;pointer-events:none">
-      <span>📍</span><span>서비스 지역(서천군)이 아닙니다</span>
+    <div id="map-home" class="map-container" style="flex:1"></div>
+    <div class="home-sheet">
+      <!-- 입력 트랙 -->
+      <div class="loc-track-wrap">
+        <div class="loc-track">
+          <div class="loc-dot start"></div>
+          <div class="loc-vline"></div>
+          <!-- 경유지 행 (숨김) -->
+          <div id="via-dot-wrap" style="display:none;flex-direction:column;align-items:center">
+            <div class="loc-dot via"></div>
+            <div class="loc-vline"></div>
+          </div>
+          <div class="loc-dot end"></div>
+        </div>
+        <div class="loc-inputs">
+          <div class="loc-input" onclick="openPlaceSearch('from')">
+            <span class="loc-input-text" id="text-from">현위치</span>
+            <span class="gps-tag" id="tag-gps">GPS</span>
+          </div>
+          <div class="loc-input" id="via-row" style="display:none" onclick="openPlaceSearch('via')">
+            <span class="loc-input-text placeholder" id="text-via">경유지 입력</span>
+          </div>
+          <div class="loc-input" onclick="openPlaceSearch('to')">
+            <span class="loc-input-text placeholder" id="text-to">도착지 입력</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center">
+          <div class="swap-btn" onclick="swapFromTo()">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M4 2v10M4 2L2 4M4 2L6 4" stroke="#888" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M10 12V2M10 12L8 10M10 12L12 10" stroke="#888" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <!-- 시간 칩 -->
+      <div class="time-chips">
+        <span class="time-chip active" id="chip-now"    onclick="setTimeChip('now')">지금</span>
+        <span class="time-chip"        id="chip-1h"     onclick="setTimeChip('1h')">+1시간</span>
+        <span class="time-chip"        id="chip-2h"     onclick="setTimeChip('2h')">+2시간</span>
+        <span class="time-chip"        id="chip-custom" onclick="setTimeChip('custom')">직접입력</span>
+      </div>
+      <input type="time" id="custom-time" class="custom-time" onchange="STATE.search.customTime=this.value">
+      <!-- 검색 버튼 + 경유지 -->
+      <div class="search-row">
+        <button class="search-btn" onclick="doSearch()">경로 검색</button>
+        <button class="via-btn" id="via-btn" onclick="toggleVia()">+ 경유지</button>
+      </div>
     </div>
-    <!-- 검색 시트 -->
-    <div class="bottom-sheet" id="search-sheet">
-      <div class="sheet-handle"></div>
-      <!-- 출발지 -->
-      <div class="loc-row">
-        <div class="loc-dot dot-start"></div>
-        <div class="loc-input" id="input-from" onclick="openPlaceSearch('from')">
-          <span class="loc-text" id="text-from">현위치</span>
-          <span class="loc-tag tag-gps" id="tag-from">GPS</span>
-        </div>
-      </div>
-      <!-- 교환 화살표 -->
-      <div class="loc-arrow-row" onclick="swapFromTo()" title="출발/도착 교환">
-        <div class="loc-vline"></div>
-      </div>
-      <!-- 경유지 (기본 숨김) -->
-      <div class="loc-row" id="via-row" style="display:none">
-        <div class="loc-dot dot-via"></div>
-        <div class="loc-input" id="input-via" onclick="openPlaceSearch('via')">
-          <span class="loc-text" id="text-via">경유지 입력</span>
-          <span class="loc-tag tag-via">경유</span>
-        </div>
-      </div>
-      <!-- 도착지 -->
-      <div class="loc-row">
-        <div class="loc-dot dot-end"></div>
-        <div class="loc-input" id="input-to" onclick="openPlaceSearch('to')">
-          <span class="loc-text loc-placeholder" id="text-to">도착지 입력 또는 선택</span>
-        </div>
-        <button class="save-star-btn" id="save-star-btn" onclick="saveCurrentTo()" title="이 장소 저장">☆</button>
-      </div>
-      <!-- 경유지 추가 버튼 -->
-      <div class="add-via-btn" id="add-via-btn" onclick="toggleVia()">+ 경유지 추가</div>
-      <!-- 시간 선택 -->
-      <div class="time-row">
-        <span class="time-label">출발</span>
-        <div class="time-chips">
-          <span class="time-chip active" id="chip-now" onclick="setTimeChip('now')">지금</span>
-          <span class="time-chip" id="chip-1h" onclick="setTimeChip('1h')">+1시간</span>
-          <span class="time-chip" id="chip-2h" onclick="setTimeChip('2h')">+2시간</span>
-          <span class="time-chip" id="chip-custom" onclick="setTimeChip('custom')">직접입력</span>
-        </div>
-      </div>
-      <!-- 직접입력 시간 -->
-      <input type="time" id="custom-time" class="custom-time-input" style="display:none" onchange="onCustomTime(this.value)">
-      <!-- 검색 버튼 -->
-      <button class="search-btn" onclick="searchRoute()">경로 검색</button>
-    </div>
+    <button class="my-loc-btn" onclick="goToMyLocation()" style="bottom:calc(14px + var(--sheet-h, 0px))">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="#185FA5" stroke-width="1.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15" stroke="#185FA5" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
   </div>
 
   <!-- ==================== 검색결과 화면 ==================== -->
@@ -80,191 +80,270 @@
       <button class="back-btn" onclick="showScreen('home')">‹</button>
       <div>
         <div class="result-title" id="result-title">경로 검색결과</div>
-        <div class="result-sub" id="result-sub"></div>
+        <div class="result-sub"   id="result-sub"></div>
       </div>
     </div>
     <div class="result-body" id="result-body"></div>
+    <!-- 탭바 -->
+    <nav class="tabbar">
+      <div class="tab active" id="tab-result" onclick="showScreen('home')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="#1D9E75" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="#1D9E75" stroke-width="1.5"/></svg>
+        <span>홈</span>
+      </div>
+      <div class="tab" onclick="showScreen('timetable')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="#EF9F27" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="#EF9F27" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>버스시간표</span>
+      </div>
+      <div class="tab" onclick="showScreen('routes')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="#185FA5" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="#185FA5"/><circle cx="16" cy="14" r="2" fill="#185FA5"/><path d="M2 10h18" stroke="#185FA5" stroke-width="1.3"/></svg>
+        <span>버스노선도</span>
+      </div>
+      <div class="tab" onclick="showScreen('transport')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="#7F77DD" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="#7F77DD"/><circle cx="16" cy="16.5" r="2" fill="#7F77DD"/><path d="M2 19h18" stroke="#7F77DD" stroke-width="1.3"/></svg>
+        <span>시외버스·기차</span>
+      </div>
+      <div class="tab" onclick="showScreen('favorites')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
+        <span>즐겨찾기</span>
+      </div>
+    </nav>
   </div>
 
   <!-- ==================== 경로상세 화면 ==================== -->
   <div id="screen-detail" class="screen">
-    <div id="map-detail" class="map-container" style="height:45vh"></div>
-    <div class="bottom-sheet-detail">
-      <div class="sheet-handle"></div>
-      <div class="bus-live-bar" id="bus-live-bar">
-        <div class="bus-live-top">
-          <span class="live-badge">LIVE</span>
-          <span class="bus-live-name" id="live-bus-name">버스 정보</span>
-          <span class="bus-live-status" id="live-bus-status"></span>
-        </div>
-      </div>
+    <div id="map-detail" class="map-container" style="height:50vh">
+      <!-- 뒤로가기 -->
+      <button class="back-btn" style="position:absolute;top:12px;left:12px;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.12)" onclick="showScreen('result')">‹</button>
+      <!-- 경로 카드 오버레이 -->
+      <div id="detail-card" style="position:absolute;top:12px;left:52px;right:12px;background:#fff;border-radius:12px;padding:10px 12px;box-shadow:0 2px 12px rgba(0,0,0,.15);z-index:10"></div>
+      <!-- 현위치 버튼 -->
+      <button class="my-loc-btn" style="bottom:12px" onclick="if(STATE.mapDetail){STATE.mapDetail.panTo(new kakao.maps.LatLng(STATE.myLocation.lat,STATE.myLocation.lng))}">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="#185FA5" stroke-width="1.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15" stroke="#185FA5" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="detail-sheet">
       <div class="stop-list" id="stop-list"></div>
     </div>
+    <nav class="tabbar">
+      <div class="tab active" onclick="showScreen('home')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="#1D9E75" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="#1D9E75" stroke-width="1.5"/></svg>
+        <span>홈</span>
+      </div>
+      <div class="tab" onclick="showScreen('timetable')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="#EF9F27" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="#EF9F27" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>버스시간표</span>
+      </div>
+      <div class="tab" onclick="showScreen('routes')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="#185FA5" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="#185FA5"/><circle cx="16" cy="14" r="2" fill="#185FA5"/><path d="M2 10h18" stroke="#185FA5" stroke-width="1.3"/></svg>
+        <span>버스노선도</span>
+      </div>
+      <div class="tab" onclick="showScreen('transport')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="#7F77DD" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="#7F77DD"/><circle cx="16" cy="16.5" r="2" fill="#7F77DD"/><path d="M2 19h18" stroke="#7F77DD" stroke-width="1.3"/></svg>
+        <span>시외버스·기차</span>
+      </div>
+      <div class="tab" onclick="showScreen('favorites')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
+        <span>즐겨찾기</span>
+      </div>
+    </nav>
   </div>
 
   <!-- ==================== 버스시간표 화면 ==================== -->
   <div id="screen-timetable" class="screen">
-    <div class="page-header green">
-      <button class="back-btn" onclick="showScreen('home')">‹</button>
-      <div>
-        <div class="page-title">정류장별 버스 시간표</div>
-        <div class="page-sub">정류장명 검색 → 전체 버스 시간표</div>
+    <div class="tt-header">
+      <div class="tt-title">버스시간표</div>
+      <div class="search-bar" style="border-color:var(--border)">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="#888" stroke-width="1.3"/><path d="M10 10l2.5 2.5" stroke="#888" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <input type="text" id="stop-search-input" placeholder="정류장명 입력 (예: 서천터미널, 한산)" oninput="onStopSearchInput(this.value)" autocomplete="off">
+        <button onclick="clearStopSearch()" style="background:none;border:none;color:#bbb;font-size:14px;padding:0">✕</button>
       </div>
+      <div id="stop-search-results" class="tt-search-results" style="display:none"></div>
     </div>
-    <!-- 검색창 -->
-    <div style="padding:10px 12px;background:#fff;border-bottom:.5px solid #eee">
-      <div style="display:flex;align-items:center;gap:8px;background:#f5f5f5;border-radius:10px;padding:8px 12px;border:.5px solid #e0e0e0">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="#888" stroke-width="1.4"/><path d="M10 10l3 3" stroke="#888" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <input type="text" id="stop-search-input" placeholder="정류장명 입력 (예: 서천역, 한산)" 
-          style="flex:1;border:none;background:none;font-size:14px;font-family:inherit;outline:none;color:#222"
-          oninput="onStopSearchInput(this.value)"
-          autocomplete="off">
-        <button onclick="clearStopSearch()" style="background:none;border:none;padding:0;cursor:pointer;color:#bbb;font-size:16px">✕</button>
+    <div class="tt-body" id="timetable-body">
+      <div style="text-align:center;padding:40px;color:var(--text-3);font-size:13px">정류장명을 검색하세요</div>
+    </div>
+    <nav class="tabbar">
+      <div class="tab" onclick="showScreen('home')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span>홈</span>
       </div>
-      <!-- 검색 결과 드롭다운 -->
-      <div id="stop-search-results" style="display:none;margin-top:6px;background:#fff;border-radius:8px;border:.5px solid #e0e0e0;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.08)"></div>
-    </div>
-    <!-- 선택된 정류장 + 시간표 -->
-    <div id="timetable-body" style="flex:1;overflow-y:auto;padding:0 0 12px">
-      <div style="text-align:center;padding:40px 20px;color:#bbb;font-size:13px">
-        정류장명을 검색하세요
+      <div class="tab active" id="tab-timetable">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="#EF9F27" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="#EF9F27" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>버스시간표</span>
       </div>
-    </div>
+      <div class="tab" onclick="showScreen('routes')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/><path d="M2 10h18" stroke="currentColor" stroke-width="1.3"/></svg>
+        <span>버스노선도</span>
+      </div>
+      <div class="tab" onclick="showScreen('transport')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="currentColor"/><circle cx="16" cy="16.5" r="2" fill="currentColor"/><path d="M2 19h18" stroke="currentColor" stroke-width="1.3"/></svg>
+        <span>시외버스·기차</span>
+      </div>
+      <div class="tab" onclick="showScreen('favorites')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
+        <span>즐겨찾기</span>
+      </div>
+    </nav>
   </div>
 
-  <!-- ==================== 노선도 화면 ==================== -->
+  <!-- ==================== 버스노선도 화면 ==================== -->
   <div id="screen-routes" class="screen">
-    <div class="page-header green">
-      <button class="back-btn" onclick="routesBack()">‹</button>
-      <div>
-        <div class="page-title">서천지역 버스 노선도</div>
-        <div class="page-sub" id="routes-sub">권역 선택 → 노선 선택 → 시간표</div>
+    <div class="zone-legend">
+      <div class="zone-legend-title">버스노선도</div>
+      <div class="zone-pills" id="zone-pills"></div>
+    </div>
+    <div id="map-routes" class="map-container" style="height:220px;flex-shrink:0"></div>
+    <div class="routes-list" id="route-list"></div>
+    <nav class="tabbar">
+      <div class="tab" onclick="showScreen('home')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span>홈</span>
       </div>
-    </div>
-    <div class="zone-tabs" id="zone-tabs"></div>
-
-    <!-- 상단: 지도 (자유 조작) -->
-    <div id="map-routes" class="map-container" style="height:calc(55vh - 100px);min-height:180px"></div>
-    <div class="legend-bar" id="legend-bar"></div>
-
-    <!-- 하단: 노선 목록 or 선택 노선 상세 -->
-    <div id="routes-bottom" style="flex:1;overflow-y:auto;background:#fff;border-top:.5px solid #eee">
-      <div class="route-list" id="route-list"></div>
-    </div>
+      <div class="tab" onclick="showScreen('timetable')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>버스시간표</span>
+      </div>
+      <div class="tab active" id="tab-routes">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="#185FA5" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="#185FA5"/><circle cx="16" cy="14" r="2" fill="#185FA5"/><path d="M2 10h18" stroke="#185FA5" stroke-width="1.3"/></svg>
+        <span>버스노선도</span>
+      </div>
+      <div class="tab" onclick="showScreen('transport')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="currentColor"/><circle cx="16" cy="16.5" r="2" fill="currentColor"/><path d="M2 19h18" stroke="currentColor" stroke-width="1.3"/></svg>
+        <span>시외버스·기차</span>
+      </div>
+      <div class="tab" onclick="showScreen('favorites')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
+        <span>즐겨찾기</span>
+      </div>
+    </nav>
   </div>
 
-  <!-- ==================== 고속·기차 화면 ==================== -->
+  <!-- ==================== 시외버스·기차 화면 ==================== -->
   <div id="screen-transport" class="screen">
-    <div class="page-header green">
-      <button class="back-btn" onclick="showScreen('home')">‹</button>
-      <div>
-        <div class="page-title">시외(고속)버스 · 기차</div>
-        <div class="page-sub" id="transport-sub">터미널 · 역 선택</div>
+    <div style="padding:14px 12px 10px;border-bottom:0.5px solid var(--border);flex-shrink:0">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">시외버스·기차</div>
+      <div class="transport-tabs">
+        <button class="tr-tab" id="tr-tab-pangyoStation"    onclick="showTransportTab('pangyoStation')">판교역</button>
+        <button class="tr-tab" id="tr-tab-seocheonStation"  onclick="showTransportTab('seocheonStation')">서천역</button>
+        <button class="tr-tab" id="tr-tab-janghangStation"  onclick="showTransportTab('janghangStation')">장항역</button>
+        <button class="tr-tab" id="tr-tab-seocheonTerminal" onclick="showTransportTab('seocheonTerminal')">서천터미널</button>
+        <button class="tr-tab" id="tr-tab-janghangTerminal" onclick="showTransportTab('janghangTerminal')">장항터미널</button>
       </div>
     </div>
-    <!-- 상단 탭 -->
-    <div id="transport-tabs" style="display:flex;overflow-x:auto;background:#fff;border-bottom:1.5px solid #eee;padding:0 8px;gap:4px;flex-shrink:0">
-      <button class="tr-tab active" onclick="showTransportTab('pangyoStation')" id="tr-tab-pangyoStation">판교역</button>
-      <button class="tr-tab" onclick="showTransportTab('seocheonStation')" id="tr-tab-seocheonStation">서천역</button>
-      <button class="tr-tab" onclick="showTransportTab('janghangStation')" id="tr-tab-janghangStation">장항역</button>
-      <button class="tr-tab" onclick="showTransportTab('seocheonTerminal')" id="tr-tab-seocheonTerminal">서천터미널</button>
-      <button class="tr-tab" onclick="showTransportTab('janghangTerminal')" id="tr-tab-janghangTerminal">장항터미널</button>
-    </div>
-    <!-- 시간표 본문 -->
-    <div id="transport-body" style="flex:1;overflow-y:auto;padding-bottom:12px"></div>
+    <div class="transport-body" id="transport-body"></div>
+    <nav class="tabbar">
+      <div class="tab" onclick="showScreen('home')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span>홈</span>
+      </div>
+      <div class="tab" onclick="showScreen('timetable')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>버스시간표</span>
+      </div>
+      <div class="tab" onclick="showScreen('routes')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/><path d="M2 10h18" stroke="currentColor" stroke-width="1.3"/></svg>
+        <span>버스노선도</span>
+      </div>
+      <div class="tab active" id="tab-transport">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="#7F77DD" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="#7F77DD"/><circle cx="16" cy="16.5" r="2" fill="#7F77DD"/><path d="M2 19h18" stroke="#7F77DD" stroke-width="1.3"/></svg>
+        <span>시외버스·기차</span>
+      </div>
+      <div class="tab" onclick="showScreen('favorites')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
+        <span>즐겨찾기</span>
+      </div>
+    </nav>
   </div>
 
   <!-- ==================== 즐겨찾기 화면 ==================== -->
   <div id="screen-favorites" class="screen">
-    <div class="page-header green">
-      <button class="back-btn" onclick="showScreen('home')">‹</button>
-      <div>
-        <div class="page-title">즐겨찾기</div>
-        <div class="page-sub">탭하면 홈에서 바로 검색</div>
-      </div>
+    <div style="padding:14px 14px 10px;border-bottom:0.5px solid var(--border);flex-shrink:0">
+      <div style="font-size:13px;font-weight:600">즐겨찾기</div>
+      <div style="font-size:11px;color:var(--text-2);margin-top:2px">탭하면 홈에서 바로 검색</div>
     </div>
-    <div id="favorites-body"></div>
+    <div class="fav-body" id="favorites-body"></div>
+    <nav class="tabbar">
+      <div class="tab" onclick="showScreen('home')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span>홈</span>
+      </div>
+      <div class="tab" onclick="showScreen('timetable')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>버스시간표</span>
+      </div>
+      <div class="tab" onclick="showScreen('routes')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/><path d="M2 10h18" stroke="currentColor" stroke-width="1.3"/></svg>
+        <span>버스노선도</span>
+      </div>
+      <div class="tab" onclick="showScreen('transport')">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="currentColor"/><circle cx="16" cy="16.5" r="2" fill="currentColor"/><path d="M2 19h18" stroke="currentColor" stroke-width="1.3"/></svg>
+        <span>시외버스·기차</span>
+      </div>
+      <div class="tab active" id="tab-favorites">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
+        <span>즐겨찾기</span>
+      </div>
+    </nav>
   </div>
 
   <!-- ==================== 장소 검색 모달 ==================== -->
-  <div id="place-modal" class="modal" style="display:none">
+  <div id="place-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closePlaceModal()">
     <div class="modal-box">
       <div class="modal-header">
         <span class="modal-title" id="modal-title">장소 검색</span>
         <button class="modal-close" onclick="closePlaceModal()">✕</button>
       </div>
       <input type="text" class="modal-input" id="place-input" placeholder="정류장명 또는 장소 입력" oninput="onPlaceInput(this.value)" autocomplete="off">
-      <div class="modal-results" id="place-results"></div>
+      <div class="modal-scroll">
+        <div id="modal-results"></div>
+        <div id="modal-saved"></div>
+      </div>
     </div>
   </div>
 
-  <!-- ==================== 탭바 ==================== -->
-  <nav class="tabbar">
-    <div class="tab active" id="tab-home" onclick="showScreen('home')">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <path d="M3 12L12 3L21 12" stroke="#1D9E75" stroke-width="2" stroke-linecap="round"/>
-        <rect x="7" y="13" width="10" height="8" rx="1.5" fill="#1D9E75" opacity="0.15" stroke="#1D9E75" stroke-width="1.6"/>
-        <rect x="10" y="16" width="4" height="5" rx=".5" fill="#1D9E75"/>
-      </svg>
-      <span>홈</span>
-    </div>
-    <div class="tab" id="tab-timetable" onclick="showScreen('timetable')">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <rect x="3" y="4" width="18" height="16" rx="2" fill="#EF9F27" opacity="0.12" stroke="#EF9F27" stroke-width="1.6"/>
-        <path d="M3 9h18" stroke="#EF9F27" stroke-width="1.3"/>
-        <path d="M8 4V7M16 4V7" stroke="#EF9F27" stroke-width="1.4" stroke-linecap="round"/>
-        <path d="M7 13h2M11 13h2M15 13h2" stroke="#EF9F27" stroke-width="1.3" stroke-linecap="round"/>
-        <path d="M7 17h2M11 17h2M15 17h2" stroke="#EF9F27" stroke-width="1.3" stroke-linecap="round"/>
-      </svg>
-      <span>버스시간표</span>
-    </div>
-    <div class="tab" id="tab-routes" onclick="showScreen('routes')">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <rect x="2" y="5" width="20" height="13" rx="3" fill="#185FA5" opacity="0.12" stroke="#185FA5" stroke-width="1.6"/>
-        <circle cx="6.5" cy="16" r="2" fill="#185FA5"/>
-        <circle cx="17.5" cy="16" r="2" fill="#185FA5"/>
-        <path d="M2 9.5h20" stroke="#185FA5" stroke-width="1.4"/>
-        <path d="M8.5 5.5v4M15.5 5.5v4" stroke="#185FA5" stroke-width="1.3" stroke-linecap="round"/>
-      </svg>
-      <span>버스노선도</span>
-    </div>
-    <div class="tab" id="tab-transport" onclick="showScreen('transport')">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <!-- 기차 몸통 -->
-        <rect x="3" y="5" width="18" height="11" rx="2" fill="#7F77DD" opacity="0.12" stroke="#7F77DD" stroke-width="1.6"/>
-        <!-- 창문 -->
-        <rect x="6" y="8" width="4" height="3" rx=".8" fill="#7F77DD" opacity="0.5"/>
-        <rect x="14" y="8" width="4" height="3" rx=".8" fill="#7F77DD" opacity="0.5"/>
-        <!-- 선로 연결 -->
-        <path d="M7 16v2M17 16v2" stroke="#7F77DD" stroke-width="1.4" stroke-linecap="round"/>
-        <!-- 바퀴 -->
-        <circle cx="7" cy="18.5" r="1.6" fill="#7F77DD"/>
-        <circle cx="17" cy="18.5" r="1.6" fill="#7F77DD"/>
-        <!-- 선로 -->
-        <path d="M2 21h20" stroke="#7F77DD" stroke-width="1.2" stroke-linecap="round"/>
-        <path d="M4 21v-1M8 21v-1M12 21v-1M16 21v-1M20 21v-1" stroke="#7F77DD" stroke-width="1" stroke-linecap="round"/>
-      </svg>
-      <span>시외·기차</span>
-    </div>
-    <div class="tab" id="tab-favorites" onclick="showScreen('favorites')">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2C8.7 2 6 4.7 6 8c0 5 6 12 6 12s6-7 6-12c0-3.3-2.7-6-6-6z" fill="#E24B4A" opacity="0.15" stroke="#E24B4A" stroke-width="1.6"/>
-        <circle cx="12" cy="8" r="2.5" fill="#E24B4A"/>
-      </svg>
-      <span>즐겨찾기</span>
-    </div>
-  </nav>
+</div><!-- /#app -->
 
-</div>
-
-<!-- 모듈 순서 중요: core → search → map → render → transport → ui → main -->
-<script src="js/core.js"></script>
+<!-- JS 모듈 -->
+<script src="js/data.js"></script>
+<script src="js/routeCoords.js"></script>
 <script src="js/search.js"></script>
-<script src="js/map.js"></script>
-<script src="js/render.js"></script>
-<script src="js/transport.js"></script>
+<script src="js/maps.js"></script>
 <script src="js/ui.js"></script>
-<script src="js/main.js"></script>
+<script src="js/screens.js"></script>
+
+<!-- 앱 초기화 -->
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadData();
+  initLocation();
+  initRoutesScreen();
+  loadKakaoMap();
+
+  history.replaceState({ screen:'home' }, '', '');
+  window.addEventListener('popstate', e => {
+    const sc = e.state?.screen || 'home';
+    showScreen(sc, false);
+  });
+});
+
+function swapFromTo() {
+  const tmp = STATE.search.from;
+  STATE.search.from = STATE.search.to;
+  STATE.search.to = tmp;
+  renderHomeSheet();
+  updateHomeMarkers();
+}
+
+function goToMyLocation() {
+  if (STATE.mapHome) {
+    STATE.mapHome.panTo(new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng));
+  }
+}
+</script>
+
+<!-- 카카오맵 SDK -->
+<script>window.KAKAO_KEY = 'ea4bdbbdf5c627aba4db0a4b163c9b0d';</script>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&autoload=false&libraries=services,clusterer"></script>
 
 </body>
 </html>

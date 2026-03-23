@@ -1,0 +1,600 @@
+'use strict';
+
+// ==================== 장소 검색 모달 ====================
+let _placeTarget = 'to';
+
+function openPlaceSearch(target) {
+  _placeTarget = target;
+  const titles = { from:'출발지 선택', via:'경유지 선택', to:'도착지 선택' };
+  document.getElementById('modal-title').textContent = titles[target] || '장소 선택';
+  document.getElementById('place-input').value = '';
+  document.getElementById('modal-results').innerHTML = '';
+  renderModalSaved(target);
+  document.getElementById('place-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('place-input').focus(), 300);
+}
+
+function closePlaceModal() {
+  document.getElementById('place-modal').style.display = 'none';
+}
+
+function renderModalSaved(target) {
+  const el = document.getElementById('modal-saved');
+  let html = '';
+
+  if (target === 'from' && STATE.gpsReady) {
+    html += `<div class="modal-section-label">빠른 선택</div>
+    <div class="modal-item" onclick="selectPlace('from',${JSON.stringify({name:'현위치',lat:STATE.myLocation.lat,lng:STATE.myLocation.lng,isGps:true}).replace(/"/g,'&quot;')})">
+      <div class="modal-item-icon" style="background:var(--blue-l)">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" fill="#185FA5"/><circle cx="7" cy="7" r="1.5" fill="#fff"/></svg>
+      </div>
+      <div><div class="modal-item-name">현위치</div><div class="modal-item-sub">GPS 자동 감지</div></div>
+    </div>`;
+  }
+
+  if (STATE.savedPlaces.length) {
+    html += `<div class="modal-section-label">저장된 장소</div>`;
+    STATE.savedPlaces.forEach(p => {
+      html += `<div class="modal-item" onclick="selectPlace('${target}',${JSON.stringify(p).replace(/"/g,'&quot;')})">
+        <div class="modal-item-icon" style="background:var(--blue-l)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#185FA5"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
+        </div>
+        <div><div class="modal-item-name">${p.label||p.name}</div><div class="modal-item-sub">${p.name}</div></div>
+      </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function onPlaceInput(val) {
+  const el = document.getElementById('modal-results');
+  if (!val.trim()) { el.innerHTML=''; return; }
+
+  const results = STOPS.filter(s => s.name.includes(val.trim()) || (s.displayName||'').includes(val.trim())).slice(0,20);
+  if (!results.length) {
+    // 카카오 로컬 검색 fallback
+    el.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-3)">정류장을 찾는 중...</div>';
+    searchPlaceKakao(val.trim(), el);
+    return;
+  }
+  renderStopResults(results, el);
+}
+
+function searchPlaceKakao(keyword, container) {
+  if (typeof kakao==='undefined') return;
+  const ps = new kakao.maps.services.Places();
+  ps.keywordSearch(keyword+' 서천', (data, status) => {
+    if (status!==kakao.maps.services.Status.OK||!data.length) {
+      container.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-3)">결과 없음</div>';
+      return;
+    }
+    const pLat=parseFloat(data[0].y), pLng=parseFloat(data[0].x);
+    const nearest = STOPS.map(s=>({...s,d:distM(s.lat,s.lng,pLat,pLng)})).sort((a,b)=>a.d-b.d).slice(0,5);
+    container.innerHTML = `<div class="modal-section-label">"${data[0].place_name}" 인근 정류장</div>`;
+    renderStopResults(nearest, container, true);
+  });
+}
+
+function renderStopResults(results, container, append=false) {
+  const html = results.map(s => {
+    const disp = s.displayName||s.name;
+    const diffName = disp!==s.name ? `<div class="modal-item-sub">${s.name}</div>` : '';
+    return `<div class="modal-item" onclick="selectPlace('${_placeTarget}',${JSON.stringify({name:s.name,displayName:disp,lat:s.lat,lng:s.lng}).replace(/"/g,'&quot;')})">
+      <div class="modal-item-icon" style="background:var(--green-l)">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#1D9E75"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
+      </div>
+      <div><div class="modal-item-name">${disp}</div>${diffName}</div>
+    </div>`;
+  }).join('');
+  if (append) container.innerHTML += html;
+  else container.innerHTML = `<div class="modal-section-label">정류장 검색 결과</div>${html}`;
+}
+
+function selectPlace(target, place) {
+  if (typeof place === 'string') place = JSON.parse(place);
+  STATE.search[target] = place;
+  renderHomeSheet();
+  updateHomeMarkers();
+  closePlaceModal();
+}
+
+// ==================== 버스시간표 화면 ====================
+function onStopSearchInput(val) {
+  const resEl = document.getElementById('stop-search-results');
+  if (!val.trim()) { resEl.style.display='none'; return; }
+  const matches = STOPS.filter(s=>s.name.includes(val.trim()))
+    .filter((s,i,arr)=>arr.findIndex(x=>x.name===s.name)===i).slice(0,15);
+  if (!matches.length) { resEl.style.display='none'; return; }
+  resEl.innerHTML = matches.map(s => {
+    const disp=s.displayName||s.name;
+    return `<div class="tt-result-item" onclick="selectStopForTimetable('${s.name.replace(/'/g,"\\'")}','${disp.replace(/'/g,"\\'")}',${s.lat},${s.lng})">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1C4.3 1 3 2.3 3 4c0 2.5 3 6 3 6s3-3.5 3-6c0-1.7-1.3-3-3-3z" fill="#EF9F27"/><circle cx="6" cy="4" r="1.2" fill="#fff"/></svg>
+      ${disp}
+    </div>`;
+  }).join('');
+  resEl.style.display='block';
+}
+
+function clearStopSearch() {
+  document.getElementById('stop-search-input').value='';
+  document.getElementById('stop-search-results').style.display='none';
+  document.getElementById('timetable-body').innerHTML=`<div style="text-align:center;padding:40px;color:var(--text-3);font-size:13px">정류장명을 검색하세요</div>`;
+}
+
+function selectStopForTimetable(name, disp, lat, lng) {
+  document.getElementById('stop-search-input').value=disp;
+  document.getElementById('stop-search-results').style.display='none';
+  renderStopTimetable(name, disp, lat, lng);
+}
+
+function renderStopTimetable(stopName, displayName, lat, lng) {
+  const dayType = getDayType();
+  const nMin    = nowMin();
+  const stopCoords = getNearbyCoords(lat, lng, 300);
+  const HUBS = ['서천터미널','한산공용터미널','장항터미널','서천역','판교','기산','문산','화양','비인','마서','종천','장항읍내'];
+
+  const rows = [];
+  ROUTES.forEach(route => {
+    const coords = getRouteCoords(route);
+    if (!coords.length) return;
+    const idx = findSnapIdxMulti(coords, stopCoords, 300);
+    if (idx === -1) return;
+
+    const ck    = getCountKey(dayType);
+    const count = route[ck]||0;
+    if (!count||!route['첫차']||!route['막차']) return;
+
+    const totalMin = Math.round((route['거리']||10)*2.5+5);
+    const len      = Math.max(coords.length-1,1);
+    const leg0     = Math.round(totalMin*idx/len);
+
+    // 주요경유 (이 정류장 이후 허브)
+    const via = [route['기점'], ...route['경유'].split('→').map(s=>s.trim()).filter(Boolean), route['종점']];
+    const afterHubs = [];
+    let passed = false;
+    for (const v of via) {
+      if (v.includes(stopName.substring(0,3))) passed=true;
+      if (passed && afterHubs.length<3) {
+        const h=HUBS.find(h=>v.includes(h.substring(0,3)));
+        if (h&&!afterHubs.includes(h)) afterHubs.push(h);
+      }
+    }
+
+    const color  = getZoneColor(route);
+    const busNum = getBusNum(route);
+    const fMin   = timeToMin(route['첫차']), lMin=timeToMin(route['막차']);
+    const interval = count>1?Math.round((lMin-fMin)/(count-1)):0;
+
+    for (let i=0;i<count;i++) {
+      const depMin  = fMin+interval*i;
+      const passMin = depMin+leg0;
+      rows.push({ passMin, isPast:passMin<nMin, color, busNum, via:afterHubs.join('→'), terminus:route['종점'], remark:'' });
+    }
+  });
+
+  rows.sort((a,b)=>a.passMin-b.passMin);
+  if (!rows.length) {
+    document.getElementById('timetable-body').innerHTML=`<div style="text-align:center;padding:40px;color:var(--text-3);font-size:13px">이 정류장을 지나는 버스가 없습니다</div>`;
+    return;
+  }
+
+  const routeCount = new Set(rows.map(r=>r.busNum)).size;
+  const nextIdx    = rows.findIndex(r=>!r.isPast);
+
+  let html=`<div class="tt-stop-info">
+    <div>
+      <span class="tt-stop-name">📍 ${displayName}</span>
+    </div>
+    <span class="tt-stop-meta">${routeCount}개 노선 · ${rows.length}대</span>
+  </div>
+  <div class="tt-grid-header">
+    <div>시간</div><div>번호</div><div>기점</div><div>주요경유</div><div>종점</div><div>비고</div>
+  </div>`;
+
+  rows.forEach((r,i) => {
+    const isNext = i===nextIdx;
+    html+=`<div class="tt-row${r.isPast?' past':isNext?' next-bus':''}">
+      <div class="tt-time${r.isPast?' past':isNext?' next':''}">${minToTime(r.passMin)}</div>
+      <div><span class="bus-pill" style="background:${r.color};font-size:10px;padding:1px 5px">${r.busNum}</span></div>
+      <div class="tt-route">${rows[i]?.terminus?rows[i].via.split('→')[0]||r.busNum:''}</div>
+      <div class="tt-route">${r.via}</div>
+      <div class="tt-dest">${r.terminus}</div>
+      <div class="tt-remark">${r.remark}</div>
+    </div>`;
+  });
+
+  document.getElementById('timetable-body').innerHTML=html;
+}
+
+// ==================== 버스노선도 화면 ====================
+function initRoutesScreen() {
+  renderZoneLegend();
+  renderRouteList(null);
+}
+
+function renderZoneLegend() {
+  const el = document.getElementById('zone-pills');
+  if (!el) return;
+  el.innerHTML = ZONES.slice(0,4).map(z =>
+    `<div class="zone-pill" id="zone-pill-${z.id}" onclick="filterByZone('${z.id}')" style="color:${z.color}">
+      <div class="zone-dot" style="background:${z.color}"></div>
+      <span>${z.name}</span>
+    </div>`
+  ).join('');
+}
+
+function filterByZone(zoneId) {
+  const isActive = STATE.selectedZone === zoneId;
+  STATE.selectedZone = isActive ? null : zoneId;
+
+  document.querySelectorAll('.zone-pill').forEach(p => p.classList.remove('active'));
+  if (!isActive) document.getElementById('zone-pill-'+zoneId)?.classList.add('active');
+
+  renderRouteList(STATE.selectedZone);
+  clearRouteMap();
+  STATE.selectedRoute = null;
+}
+
+function renderRouteList(zoneId) {
+  const el = document.getElementById('route-list');
+  if (!el) return;
+
+  let filtered = [...ROUTES].sort((a,b) => {
+    const na=parseInt(a['번호'])||999, nb=parseInt(b['번호'])||999;
+    return na-nb;
+  });
+
+  if (zoneId) {
+    const zone = ZONES.find(z=>z.id===zoneId);
+    if (zone) filtered = filtered.filter(r => zone.test(r));
+  }
+
+  el.innerHTML = filtered.map(r => {
+    const color = getZoneColor(r);
+    const num   = getBusNum(r);
+    const via   = [r['기점'], ...r['경유'].split('→').filter(Boolean).slice(0,2), r['종점']].join('→');
+    const ck    = getCountKey(getDayType());
+    const cnt   = r[ck]||0;
+    const isActive = STATE.selectedRoute?.['번호']===r['번호'] && STATE.selectedRoute?.['기점']===r['기점'];
+    return `<div class="route-list-item${isActive?' active':''}" id="rli-${r['번호']}-${r['기점'].replace(/\s/g,'')}" onclick="selectRoute(${JSON.stringify(r).replace(/"/g,'&quot;')})">
+      <span class="bus-pill" style="background:${color};font-size:10px;padding:2px 5px">${num}</span>
+      <div class="rli-route">${via}</div>
+      <div class="rli-count">${cnt}회</div>
+    </div>`;
+  }).join('');
+}
+
+function selectRoute(route) {
+  if (typeof route==='string') route=JSON.parse(route);
+  STATE.selectedRoute = route;
+
+  // 목록에서 강조
+  document.querySelectorAll('.route-list-item').forEach(el=>el.classList.remove('active'));
+  document.getElementById(`rli-${route['번호']}-${route['기점'].replace(/\s/g,'')}`)?.classList.add('active');
+
+  // 지도에 노선 표시
+  const tryShow = () => {
+    if (STATE.mapRoutes) showRouteOnMap(route);
+    else setTimeout(tryShow, 200);
+  };
+  tryShow();
+}
+
+// ==================== 시외버스·기차 화면 ====================
+const TAGO_KEY = '58b48b0d19a525cf18e98d85a1b68cc560700393a7ed41f7538cc0758386b039';
+
+const TRAIN_STATIONS = {
+  pangyoStation:   { name:'판교역', depId:'NAT081240', cols:[{ label:'상행 ↑', arrId:'NAT010032', arrName:'용산' },{ label:'하행 ↓', arrId:'NAT030879', arrName:'익산' }]},
+  seocheonStation: { name:'서천역', depId:'NAT081343', cols:[{ label:'상행 ↑', arrId:'NAT010032', arrName:'용산' },{ label:'하행 ↓', arrId:'NAT030879', arrName:'익산' }]},
+  janghangStation: { name:'장항역', depId:'NAT081318', cols:[{ label:'상행 ↑', arrId:'NAT010032', arrName:'용산' },{ label:'하행 ↓', arrId:'NAT030879', arrName:'익산' }]},
+};
+
+const TERMINAL_DATA = {
+  seocheonTerminal: {
+    name: '서천터미널',
+    cols: [
+      { dest:'서울', color:'#E24B4A', via:'홍성·장항 경유',
+        times:['07:40','09:20','11:00','13:00','15:00','17:40','19:10'], arr:['09:40','11:20','13:00','15:00','17:00','19:40','21:10'] },
+      { dest:'대전', color:'#185FA5', via:'부여·논산 경유',
+        times:['07:05','08:35','10:25','12:15','13:55','15:45','17:25','19:15'], arr:['08:05','09:35','11:25','13:15','14:55','16:45','18:25','20:15'] },
+      { dest:'세종', color:'#1D9E75', via:'부여·공주 경유',
+        times:['08:15','12:50','16:35'], arr:['09:30','14:05','17:50'] },
+      { dest:'천안', color:'#EF9F27', via:'홍성·예산 경유',
+        times:['09:10','13:20','17:50'], arr:['10:40','14:50','19:20'] },
+      { dest:'군산', color:'#7F77DD', via:'장항 경유',
+        times:['07:25','08:25','09:25','10:25','11:25','12:25','13:25','14:25','15:25','16:25','17:25','18:25'], arr:['08:25','09:25','10:25','11:25','12:25','13:25','14:25','15:25','16:25','17:25','18:25','19:25'] },
+      { dest:'익산', color:'#888', via:'군산 경유',
+        times:['08:50','11:15','14:30','17:55'], arr:['10:20','12:45','16:00','19:25'] },
+    ],
+    bookUrl:'https://www.kobus.co.kr', bookLabel:'코버스 예약',
+  },
+  janghangTerminal: {
+    name: '장항터미널',
+    cols: [
+      { dest:'서울', color:'#E24B4A', via:'서천·홍성 경유',
+        times:['07:20','09:00','10:40','12:20','14:00','15:40','17:20','18:50'], arr:['09:20','11:00','12:40','14:20','16:00','17:40','19:20','20:50'] },
+      { dest:'대전', color:'#185FA5', via:'서천·부여·논산 경유',
+        times:['06:45','08:15','10:05','11:55','13:35','15:25','17:05','18:55'], arr:['07:55','09:25','11:15','13:05','14:45','16:35','18:15','20:05'] },
+      { dest:'세종', color:'#1D9E75', via:'서천·부여·공주 경유',
+        times:['08:35','13:10','16:55'], arr:['10:05','14:35','18:20'] },
+      { dest:'천안', color:'#EF9F27', via:'서천·홍성·예산 경유',
+        times:['09:30','13:40','18:10'], arr:['11:10','15:20','19:50'] },
+      { dest:'군산', color:'#7F77DD', via:'직통',
+        times:['07:45','08:45','09:45','10:45','11:45','12:45','13:45','14:45','15:45','16:45','17:45','18:45'], arr:['08:45','09:45','10:45','11:45','12:45','13:45','14:45','15:45','16:45','17:45','18:45','19:45'] },
+      { dest:'익산', color:'#888', via:'서천·군산 경유',
+        times:['09:10','11:35','14:50','18:15'], arr:['10:50','13:15','16:30','19:55'] },
+    ],
+    bookUrl:'https://www.kobus.co.kr', bookLabel:'코버스 예약',
+  },
+};
+
+let _currentTransportTab = 'seocheonStation';
+let _trainCache = {};
+
+function initTransportScreen() {
+  showTransportTab(_currentTransportTab);
+}
+
+function showTransportTab(tabId) {
+  _currentTransportTab = tabId;
+  document.querySelectorAll('.tr-tab').forEach(t => t.classList.remove('active'));
+  const tab = document.getElementById('tr-tab-'+tabId);
+  if (tab) {
+    tab.classList.add('active');
+    if (tabId.includes('Terminal')) tab.classList.add('terminal');
+  }
+
+  const body = document.getElementById('transport-body');
+  body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-3);font-size:13px">불러오는 중...</div>';
+
+  if (TERMINAL_DATA[tabId]) {
+    renderTerminalGrid(body, TERMINAL_DATA[tabId]);
+  } else {
+    const st = TRAIN_STATIONS[tabId];
+    if (st) fetchAndRenderTrain(body, st);
+  }
+}
+
+async function fetchAndRenderTrain(body, st) {
+  const now   = new Date();
+  const today = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const cKey  = st.depId+today;
+
+  try {
+    let colData;
+    if (_trainCache[cKey]) {
+      colData = _trainCache[cKey];
+    } else {
+      const results = await Promise.all(st.cols.map(col =>
+        fetch(`https://apis.data.go.kr/1613000/TrainInfo/GetStrtpntAlocFndTrainInfo?serviceKey=${TAGO_KEY}&_type=json&numOfRows=100&depPlaceId=${st.depId}&arrPlaceId=${col.arrId}&depPlandTime=${today}`)
+          .then(r=>r.json()).catch(()=>null)
+      ));
+      colData = st.cols.map((col,i) => {
+        const items = results[i]?.response?.body?.items?.item||[];
+        const arr   = Array.isArray(items)?items:[items];
+        return arr.filter(t=>t.depplandtime).map(t=>({
+          dep:    `${t.depplandtime.slice(8,10)}:${t.depplandtime.slice(10,12)}`,
+          depMin: parseInt(t.depplandtime.slice(8,10))*60+parseInt(t.depplandtime.slice(10,12)),
+          arr:    `${t.arrplandtime.slice(8,10)}:${t.arrplandtime.slice(10,12)}`,
+          grade:  t.traingradename,
+          no:     t.trainno,
+          arrName:col.arrName+'역',
+          stName: st.name,
+          via:    col.label.includes('상')? '장항·천안·대전 경유':'천안·대전·장항 경유',
+        })).filter(t=>t.depMin>=5*60).sort((a,b)=>a.depMin-b.depMin);
+      });
+      _trainCache[cKey] = colData;
+    }
+    renderTrainGrid(body, st.cols.map((col,i)=>({label:col.label,arrName:col.arrName,trains:colData[i]})), st.name);
+  } catch(e) {
+    body.innerHTML=`<div style="padding:20px;text-align:center;color:var(--text-3);font-size:13px">시간표를 불러오지 못했어요</div>`;
+  }
+}
+
+function renderTrainGrid(body, cols, stName) {
+  const nMin = nowMin();
+  const colColors = ['#185FA5','#E24B4A'];
+
+  // 다음 편 인덱스
+  const nextIdxes = cols.map(col => col.trains.findIndex(t=>t.depMin>=nMin));
+
+  let html = `<div class="timetable-wrap">
+    <div class="tg-header">
+      <div class="tg-head-row">
+        <div class="tg-hour-col"></div>
+        ${cols.map((col,ci)=>`<div class="tg-col-head" style="color:${colColors[ci]}">${col.label}<br><span style="font-weight:400;font-size:9px">${col.arrName}행</span></div>`).join('')}
+      </div>
+    </div>`;
+
+  for (let h=5;h<=23;h++) {
+    html+=`<div class="tg-row"><div class="tg-hour">${String(h).padStart(2,'0')}</div>`;
+    cols.forEach((col,ci)=>{
+      const trains=col.trains.filter(t=>Math.floor(t.depMin/60)===h);
+      html+=`<div class="tg-cell">`;
+      if (trains.length) {
+        trains.forEach(t=>{
+          const isPast = t.depMin<nMin;
+          const isNext = col.trains[nextIdxes[ci]]===t;
+          const data   = JSON.stringify(t).replace(/"/g,'&quot;');
+          html+=`<button class="tg-btn${isPast?' past':isNext?' next-train':''}" style="color:${isPast?'#ccc':colColors[ci]}" onclick="showTransportDetail(${data})">${t.dep}</button>`;
+        });
+      }
+      html+=`</div>`;
+    });
+    html+=`</div>`;
+  }
+  html+=`</div>
+  <div style="padding:10px 12px">
+    <button class="book-btn" style="background:var(--blue)" onclick="window.open('https://www.korail.com')">코레일 예약 바로가기</button>
+  </div>
+  <div style="padding:0 12px 14px;font-size:10px;color:var(--text-3)">코레일 API 실시간 · 출발 기준</div>`;
+
+  body.innerHTML = html;
+}
+
+function renderTerminalGrid(body, data) {
+  const nMin = nowMin();
+  const { cols, bookUrl, bookLabel } = data;
+
+  // 각 열의 시간 파싱
+  const colTimes = cols.map(col=>col.times.map((t,i)=>({
+    dep:t, depMin:timeToMin(t),
+    arr:col.arr?.[i]||'', dest:col.dest, via:col.via
+  })));
+  const nextIdxes = colTimes.map(times=>times.findIndex(t=>t.depMin>=nMin));
+
+  let html = `<div class="timetable-wrap">
+    <div class="tg-header">
+      <div class="tg-head-row">
+        <div class="tg-hour-col"></div>
+        ${cols.map(col=>`<div class="tg-col-head" style="color:${col.color}">${col.dest}</div>`).join('')}
+      </div>
+    </div>`;
+
+  // 첫차~막차 시간대 계산
+  const allMins = colTimes.flat().map(t=>t.depMin);
+  const startH  = Math.floor(Math.min(...allMins)/60);
+  const endH    = Math.floor(Math.max(...allMins)/60);
+
+  for (let h=startH;h<=endH;h++) {
+    html+=`<div class="tg-row"><div class="tg-hour">${String(h).padStart(2,'0')}</div>`;
+    colTimes.forEach((times,ci)=>{
+      const items=times.filter(t=>Math.floor(t.depMin/60)===h);
+      html+=`<div class="tg-cell">`;
+      if (items.length) {
+        items.forEach(t=>{
+          const isPast=t.depMin<nMin;
+          const isNext=times[nextIdxes[ci]]===t;
+          const data=JSON.stringify({dep:t.dep,arr:t.arr,dest:t.dest,via:t.via,grade:''}).replace(/"/g,'&quot;');
+          html+=`<button class="tg-btn${isPast?' past':isNext?' next-train':''}" style="color:${isPast?'#ccc':cols[ci].color}" onclick="showTransportDetail(${data})">${t.dep}</button>`;
+        });
+      }
+      html+=`</div>`;
+    });
+    html+=`</div>`;
+  }
+  html+=`</div>
+  <div style="padding:10px 12px;font-size:10px;color:var(--text-3)">익산행은 군산 경유 ※ 실제 시간표와 다를 수 있습니다</div>
+  <div style="padding:0 12px 14px">
+    <button class="book-btn" style="background:var(--amber)" onclick="window.open('${bookUrl}')">${bookLabel} 바로가기</button>
+  </div>`;
+
+  body.innerHTML = html;
+}
+
+function showTransportDetail(t) {
+  if (typeof t==='string') t=JSON.parse(t);
+  const existing = document.getElementById('tr-popup');
+  if (existing) existing.remove();
+  const ov = document.getElementById('tr-popup-ov');
+  if (ov) ov.remove();
+
+  const gradeHtml = t.grade ? `<div class="popup-row"><span class="popup-key">등급</span><span class="popup-val">${t.grade}</span></div>` : '';
+  const stHtml    = t.stName? `<div class="popup-row"><span class="popup-key">출발역</span><span class="popup-val">${t.stName}</span></div>` : '';
+
+  const panel = document.createElement('div');
+  panel.id = 'tr-popup';
+  panel.className = 'popup-overlay';
+  panel.innerHTML = `<div class="popup-box">
+    <div class="popup-handle"></div>
+    <div class="popup-times">
+      <span class="popup-dep">${t.dep}</span>
+      <span style="color:var(--text-3)">→</span>
+      <span class="popup-arr">${t.arr||'?'}</span>
+    </div>
+    <div>
+      ${gradeHtml}${stHtml}
+      <div class="popup-row"><span class="popup-key">종점</span><span class="popup-val">${t.dest||t.arrName||''}</span></div>
+      <div class="popup-row"><span class="popup-key">주요 경유</span><span class="popup-val">${t.via||'-'}</span></div>
+    </div>
+    <button class="popup-close-btn" onclick="document.getElementById('tr-popup').remove()">닫기</button>
+  </div>`;
+  panel.onclick = (e)=>{ if(e.target===panel) panel.remove(); };
+  document.body.appendChild(panel);
+}
+
+// ==================== 즐겨찾기 ====================
+function saveRouteHistory(from, to) {
+  const key=`${from}→${to}`;
+  const idx=STATE.routeHistory.findIndex(h=>h.key===key);
+  if (idx>=0) { STATE.routeHistory[idx].count++; STATE.routeHistory[idx].lastTime=Date.now(); }
+  else STATE.routeHistory.push({key,from,to,count:1,lastTime:Date.now()});
+  STATE.routeHistory.sort((a,b)=>b.count-a.count);
+  STATE.routeHistory=STATE.routeHistory.slice(0,20);
+  localStorage.setItem('sc_route_history', JSON.stringify(STATE.routeHistory));
+}
+
+function renderFavorites() {
+  const body = document.getElementById('favorites-body');
+  if (!body) return;
+
+  let html='<div class="fav-section">';
+  html+=`<div class="fav-section-title">자주 이용한 경로</div>`;
+  if (!STATE.routeHistory.length) {
+    html+=`<div class="fav-empty">검색 이력이 없습니다<br><small>경로를 검색하면 자동으로 기록됩니다</small></div>`;
+  } else {
+    STATE.routeHistory.slice(0,3).forEach(h=>{
+      html+=`<div class="fav-item" onclick="quickSearch('${h.from.replace(/'/g,"\\'")}','${h.to.replace(/'/g,"\\'")}')">
+        <div class="fav-icon" style="background:var(--green-l)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1.5 7h11M7 1.5l5.5 5.5-5.5 5.5" stroke="#0F6E56" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="fav-main">${h.from} → ${h.to}</div>
+          <div class="fav-count">${h.count}회 이용</div>
+        </div>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="var(--text-3)" stroke-width="1.3" stroke-linecap="round"/></svg>
+      </div>`;
+    });
+  }
+  html+=`</div><div class="fav-divider"></div><div class="fav-section">`;
+  html+=`<div class="fav-section-title">저장된 장소</div>`;
+  if (!STATE.savedPlaces.length) {
+    html+=`<div class="fav-empty">저장된 장소가 없습니다<br><small>홈 화면 도착지 검색 시 저장할 수 있어요</small></div>`;
+  } else {
+    STATE.savedPlaces.forEach((p,i)=>{
+      html+=`<div class="fav-item">
+        <div class="fav-icon" style="background:var(--blue-l)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#185FA5"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="fav-main">${p.label||p.name}</div>
+          <div class="fav-sub">${p.name}</div>
+        </div>
+        <div class="fav-actions">
+          <button class="fav-action-btn from" onclick="quickSearchFrom('${p.name.replace(/'/g,"\\'")}',${p.lat},${p.lng})">출발</button>
+          <button class="fav-action-btn to"   onclick="quickSearchTo('${p.name.replace(/'/g,"\\'")}',${p.lat},${p.lng})">도착</button>
+          <button class="fav-action-btn del"  onclick="deletePlace(${i})">✕</button>
+        </div>
+      </div>`;
+    });
+  }
+  html+=`</div>`;
+  body.innerHTML=html;
+}
+
+function deletePlace(idx) {
+  STATE.savedPlaces.splice(idx,1);
+  localStorage.setItem('sc_places', JSON.stringify(STATE.savedPlaces));
+  renderFavorites();
+}
+
+function quickSearch(from, to) {
+  const frStop=STOPS.find(s=>s.name===from)||STOPS.find(s=>s.name.includes(from.substring(0,4)));
+  const toStop=STOPS.find(s=>s.name===to)||STOPS.find(s=>s.name.includes(to.substring(0,4)));
+  if (from==='현위치') STATE.search.from={name:'현위치',lat:STATE.myLocation.lat,lng:STATE.myLocation.lng,isGps:true};
+  else STATE.search.from=frStop?{name:from,lat:frStop.lat,lng:frStop.lng}:{name:from,lat:STATE.myLocation.lat,lng:STATE.myLocation.lng};
+  STATE.search.to=toStop?{name:to,lat:toStop.lat,lng:toStop.lng}:{name:to,lat:STATE.myLocation.lat,lng:STATE.myLocation.lng};
+  showScreen('home');
+  renderHomeSheet();
+  setTimeout(doSearch, 300);
+}
+
+function quickSearchFrom(name,lat,lng) {
+  STATE.search.from={name,lat:parseFloat(lat),lng:parseFloat(lng)};
+  renderHomeSheet(); showScreen('home');
+}
+
+function quickSearchTo(name,lat,lng) {
+  STATE.search.to={name,lat:parseFloat(lat),lng:parseFloat(lng)};
+  renderHomeSheet(); showScreen('home');
+}
