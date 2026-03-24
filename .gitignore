@@ -1,0 +1,12 @@
+# API 키 — 절대 저장소에 올리지 마세요
+config.js
+
+# macOS
+.DS_Store
+
+# 에디터
+.vscode/
+*.swp
+
+# 빌드 산출물 (route_coords.json은 배포 시에만 포함)
+# data/route_coords.json

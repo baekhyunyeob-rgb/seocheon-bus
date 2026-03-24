@@ -329,11 +329,18 @@
 </div><!-- /#app -->
 
 <!-- JS 모듈 -->
+<script src="config.js" onerror="console.warn('config.js 없음 — API 키를 직접 입력하거나 localStorage에 저장하세요')"></script>
 <script src="js/data.js"></script>
 <script src="js/routeCoords.js"></script>
 <script src="js/search.js"></script>
 <script src="js/maps.js"></script>
 <script src="js/ui.js"></script>
+<!-- 분리된 화면 모듈 -->
+<script src="js/modal.js"></script>
+<script src="js/timetable.js"></script>
+<script src="js/routes-screen.js"></script>
+<script src="js/transport.js"></script>
+<script src="js/favorites.js"></script>
 <script src="js/screens.js"></script>
 
 <!-- 앱 초기화 -->
@@ -342,7 +349,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
   initLocation();
   initRoutesScreen();
-  loadKakaoMap();
+  // loadKakaoMap()은 카카오 SDK onload 콜백에서 자동 호출됨
 
   history.replaceState({ screen:'home' }, '', '');
   window.addEventListener('popstate', e => {
@@ -358,18 +365,25 @@ function swapFromTo() {
   renderHomeSheet();
   updateHomeMarkers();
 }
-
-function goToMyLocation() {
-  if (STATE.mapHome) {
-    STATE.mapHome.panTo(new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng));
-  }
-}
 </script>
 
-<!-- 카카오맵 SDK -->
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&autoload=false&libraries=services,clusterer"></script>
+<!-- 카카오맵 SDK — config.js 또는 localStorage 에서 JS 키 동적 로드 -->
+<script>
+(function() {
+  const jsKey = (window.APP_CONFIG && window.APP_CONFIG.kakaoJsKey)
+             || localStorage.getItem('sc_kakao_js_key')
+             || '';
+  if (!jsKey) {
+    console.warn('[seocheon-bus] 카카오 JS 키가 없습니다. config.js를 확인하거나 디버그 화면에서 키를 입력하세요.');
+  }
+  const s = document.createElement('script');
+  s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${jsKey}&autoload=false&libraries=services,clusterer`;
+  s.onload = () => { if (typeof loadKakaoMap === 'function') loadKakaoMap(); };
+  document.head.appendChild(s);
+})();
+</script>
 
-<!-- 앱 시작 시 저장된 REST 키 불러오기 -->
+<!-- 앱 시작 시 저장된 REST 키 불러오기 (레거시 호환) -->
 <script>
 window.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem('sc_kakao_rest_key');

@@ -28,13 +28,26 @@ function initLocation() {
   navigator.geolocation.getCurrentPosition(pos => {
     STATE.myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     STATE.gpsReady = true;
+
+    // GPS 좌표 갱신 → 출발지가 현위치(GPS)로 설정되어 있으면 같이 갱신
+    if (!STATE.search.from || STATE.search.from.isGps) {
+      STATE.search.from = { name:'현위치', lat:STATE.myLocation.lat, lng:STATE.myLocation.lng, isGps:true };
+    }
+
     if (STATE.mapHome) {
       const ll = new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng);
       STATE.mapHome.setCenter(ll);
       updateMyMarker(STATE.mapHome, ll);
     }
+    renderHomeSheet();
     if (!isInSeocheon(STATE.myLocation.lat, STATE.myLocation.lng)) showOutOfArea();
-  }, () => {});
+  }, () => {
+    // GPS 실패 시 기본 위치(서천읍)로 마커 표시
+    if (STATE.mapHome) {
+      const ll = new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng);
+      updateMyMarker(STATE.mapHome, ll);
+    }
+  });
 }
 
 function showOutOfArea() {
