@@ -213,6 +213,8 @@ function findReturnRoute(toState, fromState, baseMin, dayType) {
   const retToName   = fromState?.isGps ? null : (fromState?.name || null);
   if (!retFromName) return null;
 
+  console.log(`[복귀] ${retFromName} → ${retToName||'종점'}, baseMin=${baseMin}`);
+
   const ck = getCountKey(dayType);
 
   // 직행 복귀
@@ -224,27 +226,39 @@ function findReturnRoute(toState, fromState, baseMin, dayType) {
     if (fi === -1) return false;
     if (retToName) {
       const ti = findIdxByName(c, retToName);
-      return ti !== -1 && fi < ti;
+      if (ti === -1 || fi >= ti) return false;
+      return true;
     }
     return fi < c.length - 1;
   });
 
+  console.log(`[복귀] 직행 후보: ${directs.map(r=>r['번호']).join(', ')||'없음'}`);
+
   if (directs.length) {
-    directs.sort((a, b) => (b[ck] || 0) - (a[ck] || 0));
-    const r  = directs[0];
-    const c  = getRouteCoords(r);
-    const fi = findIdxByName(c, retFromName);
-    const ti = retToName ? findIdxByName(c, retToName) : c.length - 1;
-    const nextMin = getNextBusMin(r, baseMin, dayType);
-    if (nextMin === null) return null;
-    const mins = segMin(c, fi, ti, r['거리']);
-    return {
-      type: 'direct', route: r, coords: c,
-      nextMin, boardMin: nextMin, arriveMin: nextMin + mins, minutes: mins,
-      boardStop:  c[fi]?.name || r['기점'],
-      alightStop: c[ti]?.name || r['종점'],
-      fromIdx: fi, toIdx: ti, dayType,
-    };
+    // 다음 버스 시간이 빠른 순으로 정렬
+    const directsWithNext = directs
+      .map(r => ({ r, next: getNextBusMin(r, baseMin, dayType) }))
+      .filter(x => x.next !== null)
+      .sort((a, b) => a.next - b.next);
+
+    console.log(`[복귀] nextMin 있는 후보: ${directsWithNext.map(x=>`${x.r['번호']}(${minToTime(x.next)})`).join(', ')||'없음'}`);
+
+    if (directsWithNext.length) {
+      const { r, next: nextMin } = directsWithNext[0];
+      const c  = getRouteCoords(r);
+      const fi = findIdxByName(c, retFromName);
+      const ti = retToName ? findIdxByName(c, retToName) : c.length - 1;
+      const mins = segMin(c, fi, ti, r['거리']);
+      console.log(`[복귀] 선택: ${r['번호']}번 ${minToTime(nextMin)} 출발`);
+      return {
+        type: 'direct', route: r, coords: c,
+        nextMin, boardMin: nextMin, arriveMin: nextMin + mins, minutes: mins,
+        boardStop:  c[fi]?.name || r['기점'],
+        alightStop: c[ti]?.name || r['종점'],
+        fromIdx: fi, toIdx: ti, dayType,
+      };
+    }
+    console.log('[복귀] 모든 직행 후보 당일 버스 없음');
   }
 
   // 환승 복귀
