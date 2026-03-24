@@ -1,7 +1,11 @@
 'use strict';
 
 // ==================== 상수 ====================
-const KAKAO_KEY = 'ea4bdbbdf5c627aba4db0a4b163c9b0d';
+// 카카오맵 JS 키 (지도 표시용 — index.html의 SDK 로드에도 동일하게 사용)
+const KAKAO_JS_KEY = 'ea4bdbbdf5c627aba4db0a4b163c9b0d';
+
+// 카카오 REST API 키 (Directions API 호출용)
+const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
 
 const SEOCHEON_BOUNDS = { minLat:35.97, maxLat:36.22, minLng:126.49, maxLng:126.89 };
 
@@ -190,6 +194,12 @@ function getNextBusMin(route, baseMin, dayType){
 function isInSeocheon(lat,lng){
   return lat>=SEOCHEON_BOUNDS.minLat&&lat<=SEOCHEON_BOUNDS.maxLat&&
          lng>=SEOCHEON_BOUNDS.minLng&&lng<=SEOCHEON_BOUNDS.maxLng;
+}
+
+function formatDuration(min) {
+  if (min < 60) return `${min}분`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
 }
 
 // 정류장명 → 가장 가까운 stop 반환

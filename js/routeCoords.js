@@ -59,7 +59,11 @@ async function fetchRoadPolyline(anchors) {
     if (wps) url += `&waypoints=${wps}`;
 
     try {
-      const res  = await fetch(url, { headers: { Authorization: `KakaoAK ${KAKAO_KEY}` } });
+      // REST 키: localStorage 우선 → 전역 변수 → data.js 상수 순
+      const restKey = localStorage.getItem('sc_kakao_rest_key')
+                   || window._kakaoRestKey
+                   || KAKAO_REST_KEY;
+      const res  = await fetch(url, { headers: { Authorization: `KakaoAK ${restKey}` } });
       const data = await res.json();
       const pts  = [];
       for (const section of data?.routes?.[0]?.sections || []) {
@@ -123,6 +127,22 @@ function insertAnchors(stops, anchors, polyline) {
   return result.map(({ name, displayName, lat, lng }) => ({ name, displayName, lat, lng }));
 }
 
+// ---- 진행상태 오버레이 ----
+function _showBuildProgress(msg) {
+  let el = document.getElementById('build-progress');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'build-progress';
+    el.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;border-radius:20px;padding:8px 18px;font-size:12px;z-index:999;white-space:nowrap;pointer-events:none';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+}
+function _hideBuildProgress() {
+  const el = document.getElementById('build-progress');
+  if (el) el.remove();
+}
+
 // ---- 메인 진입점 ----
 async function buildRouteCoords() {
   // 캐시 확인
@@ -134,10 +154,13 @@ async function buildRouteCoords() {
         STATE.routeCoords.set(key, val);
       }
       console.log(`노선 좌표 캐시 로드: ${STATE.routeCoords.size}개`);
+      _showBuildProgress(`✅ 노선 데이터 로드 완료 (${STATE.routeCoords.size}개)`);
+      setTimeout(_hideBuildProgress, 2000);
       return;
     }
   } catch {}
 
+  _showBuildProgress('노선 좌표 구축 중... (0 / ' + ROUTES.length + ')');
   console.log('노선 좌표 구축 시작...');
   const total = ROUTES.length;
   let done = 0;
@@ -148,6 +171,7 @@ async function buildRouteCoords() {
 
     if (!anchorData || anchorData.anchors.length < 2) {
       STATE.routeCoords.set(key, anchorData?.anchors || []);
+      done++;
       return;
     }
 
@@ -155,31 +179,51 @@ async function buildRouteCoords() {
       const polyline = await fetchRoadPolyline(anchorData.anchors);
       if (polyline.length < 2) {
         STATE.routeCoords.set(key, anchorData.anchors);
-        return;
+      } else {
+        const snapped = snapStopsToPolyline(polyline, STOPS);
+        const final   = insertAnchors(snapped, anchorData.anchors, polyline);
+        STATE.routeCoords.set(key, final);
       }
-      const snapped  = snapStopsToPolyline(polyline, STOPS);
-      const final    = insertAnchors(snapped, anchorData.anchors, polyline);
-      STATE.routeCoords.set(key, final);
     } catch (e) {
-      STATE.routeCoords.set(key, anchorData.anchors);
+      STATE.routeCoords.set(key, anchorData?.anchors || []);
     }
 
     done++;
-    if (done % 20 === 0) console.log(`노선 좌표 구축 중... ${done}/${total}`);
+    if (done % 5 === 0 || done === total) {
+      _showBuildProgress(`노선 좌표 구축 중... (${done} / ${total})`);
+      console.log(`노선 좌표 구축 중... ${done}/${total}`);
+    }
   }
 
   // CONCURRENCY 개씩 병렬 처리
   for (let i = 0; i < ROUTES.length; i += CONCURRENCY) {
-    await Promise.all(ROUTES.slice(i, i+CONCURRENCY).map(processOne));
+    await Promise.all(ROUTES.slice(i, i + CONCURRENCY).map(processOne));
   }
 
-  // localStorage 저장
+  // localStorage 저장 — name, lat, lng만 저장해서 용량 최소화
   try {
     const obj = {};
-    STATE.routeCoords.forEach((v,k) => { obj[k] = v; });
+    STATE.routeCoords.forEach((v, k) => {
+      obj[k] = v.map(c => ({ name: c.name, lat: c.lat, lng: c.lng }));
+    });
     localStorage.setItem('sc_route_coords_v3', JSON.stringify(obj));
-  } catch {}
+  } catch (e) {
+    console.warn('localStorage 저장 실패 (용량 초과 가능성):', e);
+    // 용량 초과 시 정류장 5개 이상 노선만 저장
+    try {
+      const obj = {};
+      STATE.routeCoords.forEach((v, k) => {
+        if (v.length >= 2) obj[k] = v.map(c => ({ name: c.name, lat: c.lat, lng: c.lng }));
+      });
+      localStorage.setItem('sc_route_coords_v3', JSON.stringify(obj));
+      console.log('부분 저장 완료');
+    } catch (e2) {
+      console.warn('부분 저장도 실패:', e2);
+    }
+  }
 
+  _showBuildProgress(`✅ 노선 좌표 구축 완료 (${STATE.routeCoords.size}개)`);
+  setTimeout(_hideBuildProgress, 3000);
   console.log(`✅ 노선 좌표 구축 완료: ${STATE.routeCoords.size}개`);
 }
 
@@ -188,31 +232,14 @@ function getRouteCoords(route) {
   return STATE.routeCoords.get(route['번호']+'_'+route['기점']) || [];
 }
 
-// polyline 위 좌표 스냅 인덱스 (반경 내 가장 가까운 것)
-function findSnapIdx(coords, lat, lng, radiusM = 1500) {
-  let best = -1, bestD = radiusM;
-  coords.forEach((c,i) => {
+// ── 외부에서 사용하는 좌표 유틸 (maps.js, ui.js용) ──
+// 현재위치 같은 GPS 좌표 → 가장 가까운 coords 인덱스 (maps.js 전용)
+function findNearestIdx(coords, lat, lng) {
+  let best = -1, bestD = Infinity;
+  coords.forEach((c, i) => {
     if (!c.lat) return;
-    const d = distM(c.lat,c.lng,lat,lng);
+    const d = distM(c.lat, c.lng, lat, lng);
     if (d < bestD) { bestD = d; best = i; }
   });
-  return best;
-}
-
-// 근방 stops 좌표 배열
-function getNearbyCoords(lat, lng, r = 300) {
-  const cands = STOPS.filter(s => distM(s.lat,s.lng,lat,lng) <= r);
-  return cands.length ? cands.map(s=>({lat:s.lat,lng:s.lng})) : [{lat,lng}];
-}
-
-function findSnapIdxMulti(coords, latLngs, radiusM = 1500) {
-  let best = -1, bestD = radiusM;
-  for (const {lat,lng} of latLngs) {
-    const idx = findSnapIdx(coords, lat, lng, radiusM);
-    if (idx !== -1) {
-      const d = distM(coords[idx].lat,coords[idx].lng,lat,lng);
-      if (d < bestD) { bestD = d; best = idx; }
-    }
-  }
   return best;
 }

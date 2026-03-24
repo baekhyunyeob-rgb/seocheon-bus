@@ -335,7 +335,7 @@ input[type="time"].custom-time {
 .badge-transfer { background: var(--amber-l); color: #BA7517; }
 .rc-duration { font-size: 11px; color: var(--text-2); font-weight: 500; }
 
-.rc-journey { display: flex; flex-direction: column; gap: 5px; }
+.rc-journey { display: flex; flex-direction: column; gap: 3px; }
 .rc-row { display: flex; align-items: center; gap: 7px; }
 .rc-time {
   font-size: 12px; font-weight: 600;
@@ -351,7 +351,7 @@ input[type="time"].custom-time {
 .rc-dot.orange { background: var(--amber); border-radius: 3px; }
 .rc-dot.red    { background: var(--red); }
 .rc-vline-wrap { padding-left: 43px; }
-.rc-vline { width: 1px; height: 10px; background: var(--border); margin-left: 3px; }
+.rc-vline { width: 1px; height: 7px; background: var(--border); margin-left: 3px; }
 .rc-label { font-size: 12px; color: var(--text); }
 
 .rc-next {

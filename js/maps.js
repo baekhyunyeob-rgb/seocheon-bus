@@ -159,8 +159,7 @@ function initDetailMap(result) {
 
   // 지나온 구간 (흐리게)
   const myLat=STATE.myLocation.lat, myLng=STATE.myLocation.lng;
-  let myI=0,myD=9e9;
-  segCoords.forEach((c,i)=>{ const d=distM(c.lat,c.lng,myLat,myLng); if(d<myD){myD=d;myI=i;} });
+  const myI = findNearestIdx(segCoords, myLat, myLng);
 
   if (segCoords.length >= 2) {
     // 지나온 구간

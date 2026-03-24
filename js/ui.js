@@ -89,15 +89,18 @@ function renderHomeSheet() {
 }
 
 function toggleVia() {
-  const viaRow = document.getElementById('via-row');
-  const viaBtn = document.getElementById('via-btn');
-  const visible = viaRow.style.display !== 'none';
+  const viaRow    = document.getElementById('via-row');
+  const viaDotWrap= document.getElementById('via-dot-wrap');
+  const viaBtn    = document.getElementById('via-btn');
+  const visible   = viaRow.style.display !== 'none';
   if (visible) {
     viaRow.style.display = 'none';
+    if (viaDotWrap) viaDotWrap.style.display = 'none';
     STATE.search.via = null;
     if (viaBtn) { viaBtn.textContent='+ 경유지'; viaBtn.classList.remove('remove'); }
   } else {
     viaRow.style.display = '';
+    if (viaDotWrap) viaDotWrap.style.display = 'flex';
     if (viaBtn) { viaBtn.textContent='− 경유지'; viaBtn.classList.add('remove'); }
   }
 }
@@ -206,8 +209,10 @@ function renderRouteCard(r, idx, isBest, dayType) {
   const nextChips = nextTimes.map(t=>`<span class="next-chip">${minToTime(t)}</span>`).join('');
 
   if (r.type === 'transfer') {
-    const color2 = getZoneColor(r.route2);
-    const num2   = getBusNum(r.route2);
+    const color2     = getZoneColor(r.route2);
+    const num2       = getBusNum(r.route2);
+    const boardStop  = (r.fromIdx >= 0 && r.coords?.[r.fromIdx]?.name) ? r.coords[r.fromIdx].name : r.route['기점'];
+    const alightStop = (r.toIdx2  >= 0 && r.coords2?.[r.toIdx2]?.name) ? r.coords2[r.toIdx2].name : r.route2['종점'];
     return `<div class="route-card${isBest?' best':''}" onclick="showDetail(${idx})">
       <div class="rc-top">
         <div class="rc-pills">
@@ -216,13 +221,13 @@ function renderRouteCard(r, idx, isBest, dayType) {
           <span class="bus-pill" style="background:${color2}">${num2}</span>
           <span class="rc-badge badge-transfer">1회 환승</span>
         </div>
-        <span class="rc-duration">${r.minutes}분</span>
+        <span class="rc-duration">${formatDuration(r.minutes)}</span>
       </div>
       <div class="rc-journey">
         <div class="rc-row">
           <span class="rc-time blue">${minToTime(r.boardMin)}</span>
           <div class="rc-dot blue"></div>
-          <span class="rc-label">${r.route['기점']} 탑승</span>
+          <span class="rc-label">${boardStop} 탑승</span>
         </div>
         <div class="rc-vline-wrap"><div class="rc-vline"></div></div>
         <div class="rc-row">
@@ -234,7 +239,7 @@ function renderRouteCard(r, idx, isBest, dayType) {
         <div class="rc-row">
           <span class="rc-time red">${minToTime(r.arriveMin)}</span>
           <div class="rc-dot red"></div>
-          <span class="rc-label">${r.route2['종점']} 도착</span>
+          <span class="rc-label">${alightStop} 도착</span>
         </div>
       </div>
       ${nextChips ? `<div class="rc-next"><span class="rc-next-label">이후 버스</span>${nextChips}</div>` : ''}
@@ -242,15 +247,15 @@ function renderRouteCard(r, idx, isBest, dayType) {
   }
 
   // 직행
-  const boardStop  = r.route['기점'];
-  const alightStop = r.route['종점'];
+  const boardStop  = (r.fromIdx >= 0 && r.coords[r.fromIdx]?.name) ? r.coords[r.fromIdx].name : r.route['기점'];
+  const alightStop = (r.toIdx   >= 0 && r.coords[r.toIdx]?.name)   ? r.coords[r.toIdx].name   : r.route['종점'];
   return `<div class="route-card${isBest?' best':''}" onclick="showDetail(${idx})">
     <div class="rc-top">
       <div class="rc-pills">
         <span class="bus-pill" style="background:${color}">${num}</span>
         <span style="font-size:11px;color:var(--text-2)">직행</span>
       </div>
-      <span class="rc-duration">${r.minutes}분</span>
+      <span class="rc-duration">${formatDuration(r.minutes)}</span>
     </div>
     <div class="rc-journey">
       <div class="rc-row">
@@ -276,8 +281,12 @@ function renderReturnCard(r, dayType) {
   const nextChips = nextTimes.map(t=>`<span class="next-chip return">${minToTime(t)}</span>`).join('');
 
   if (r.type === 'transfer') {
-    const color2 = getZoneColor(r.route2);
-    const num2   = getBusNum(r.route2);
+    const color2   = getZoneColor(r.route2);
+    const num2     = getBusNum(r.route2);
+    // 환승·도착 시각 추정 (search.js에 없으면 분 단위로 추산)
+    const hubMin   = r.hub2BoardMin || (r.nextMin + 20);
+    const arrMin   = r.arriveMin   || (hubMin + 20);
+    const totalMin = arrMin - r.nextMin;
     return `<div class="route-card return-card">
       <div class="rc-top">
         <div class="rc-pills">
@@ -286,6 +295,7 @@ function renderReturnCard(r, dayType) {
           <span class="bus-pill" style="background:${color2}">${num2}</span>
           <span class="rc-badge badge-transfer">1회 환승</span>
         </div>
+        <span class="rc-duration">${formatDuration(totalMin)}</span>
       </div>
       <div class="rc-journey">
         <div class="rc-row">
@@ -295,26 +305,32 @@ function renderReturnCard(r, dayType) {
         </div>
         <div class="rc-vline-wrap"><div class="rc-vline"></div></div>
         <div class="rc-row">
-          <span class="rc-time orange">환승</span>
+          <span class="rc-time orange">${minToTime(hubMin)}</span>
           <div class="rc-dot orange"></div>
-          <span class="rc-label">${r.transferHub}</span>
+          <span class="rc-label">${r.transferHub} 환승</span>
         </div>
         <div class="rc-vline-wrap"><div class="rc-vline"></div></div>
         <div class="rc-row">
-          <span class="rc-time red">도착</span>
+          <span class="rc-time red">${minToTime(arrMin)}</span>
           <div class="rc-dot red"></div>
-          <span class="rc-label">${r.route2['종점']}</span>
+          <span class="rc-label">${r.route2['종점']} 도착</span>
         </div>
       </div>
+      ${nextChips ? `<div class="rc-next"><span class="rc-next-label">이후 버스</span>${nextChips}</div>` : ''}
     </div>`;
   }
 
+  // 직행 복귀
+  const retKm  = (r.route['거리'] || 10);
+  const retMin = Math.round(retKm * 2.5 + 3);
+  const arrMin = r.nextMin + retMin;
   return `<div class="route-card return-card">
     <div class="rc-top">
       <div class="rc-pills">
         <span class="bus-pill" style="background:${color}">${num}</span>
         <span style="font-size:11px;color:var(--text-2)">직행</span>
       </div>
+      <span class="rc-duration">${formatDuration(retMin)}</span>
     </div>
     <div class="rc-journey">
       <div class="rc-row">
@@ -324,9 +340,9 @@ function renderReturnCard(r, dayType) {
       </div>
       <div class="rc-vline-wrap"><div class="rc-vline"></div></div>
       <div class="rc-row">
-        <span class="rc-time red">도착</span>
+        <span class="rc-time red">${minToTime(arrMin)}</span>
         <div class="rc-dot red"></div>
-        <span class="rc-label">${r.route['종점']}</span>
+        <span class="rc-label">${r.route['종점']} 도착</span>
       </div>
     </div>
     ${nextChips ? `<div class="rc-next"><span class="rc-next-label">이후 버스</span>${nextChips}</div>` : ''}
@@ -365,7 +381,7 @@ function renderDetailCard(result) {
           <span class="bus-pill" style="background:${color2}">${num2}</span>
           <span class="rc-badge badge-transfer">1회 환승</span>
         </div>
-        <span class="rc-duration">${result.minutes}분</span>
+        <span class="rc-duration">${formatDuration(result.minutes)}</span>
       </div>
       <div class="rc-journey">
         <div class="rc-row"><span class="rc-time blue">${minToTime(result.boardMin)}</span><div class="rc-dot blue"></div><span class="rc-label">${result.route['기점']} 탑승</span></div>
@@ -381,7 +397,7 @@ function renderDetailCard(result) {
           <span class="bus-pill" style="background:${color}">${num}</span>
           <span style="font-size:11px;color:var(--text-2)">직행</span>
         </div>
-        <span class="rc-duration">${result.minutes}분</span>
+        <span class="rc-duration">${formatDuration(result.minutes)}</span>
       </div>
       <div class="rc-journey">
         <div class="rc-row"><span class="rc-time blue">${minToTime(result.boardMin)}</span><div class="rc-dot blue"></div><span class="rc-label">${result.route['기점']} 탑승</span></div>
@@ -401,17 +417,22 @@ function renderStopList(result) {
 
   // 현재 내 위치에서 가장 가까운 정류장 인덱스
   const myLat = STATE.myLocation.lat, myLng = STATE.myLocation.lng;
-  let myI=0,myD=9e9;
-  coords.forEach((c,i)=>{if(!c.lat)return;const d=distM(c.lat,c.lng,myLat,myLng);if(d<myD){myD=d;myI=i;}});
+  const myI = findNearestIdx(coords, myLat, myLng) || 0;
 
   // 표시할 인덱스: 출발, 이전1, 현재, 이후1, 환승(있으면), 도착
   const showSet = new Set([0, Math.max(0,myI-1), myI, Math.min(coords.length-1,myI+1), coords.length-1]);
 
-  // 환승 정류장 인덱스 추가
+  // 환승 정류장 인덱스 추가 — 이름 기반
   let hubIdx = -1;
   if (result.type === 'transfer') {
-    const hs = STOPS.find(s=>s.name.includes(result.transferHub.substring(0,3)));
-    if (hs) { hubIdx = findSnapIdx(coords, hs.lat, hs.lng, 1000); if(hubIdx>=0) showSet.add(hubIdx); }
+    hubIdx = findIdxByName(coords, result.transferHub);
+    // 이름 매칭 안 되면 좌표 300m fallback
+    if (hubIdx === -1) {
+      const hs = STOPS.find(s => s.name === result.transferHub)
+              || STOPS.find(s => s.name.includes(result.transferHub.substring(0,3)));
+      if (hs) hubIdx = findIdxByCoord(coords, hs.lat, hs.lng, 300);
+    }
+    if (hubIdx >= 0) showSet.add(hubIdx);
   }
 
   let html = '';

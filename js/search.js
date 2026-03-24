@@ -1,6 +1,10 @@
 'use strict';
 
 // ==================== 경로 검색 ====================
+// 원칙:
+// - 출발지/도착지는 coords에서 정류장 이름으로 찾는다 (좌표 반경 불필요)
+// - 좌표 기반 거리 조건은 환승 허브 탐색(300m)에만 사용
+// - 반대방향 정류장 제외는 routeCoords.js dedup(50m)이 이미 처리
 
 const TRANSFER_HUBS = [
   '서천터미널','장항터미널','한산공용터미널',
@@ -8,222 +12,287 @@ const TRANSFER_HUBS = [
   '화양','비인','마산','시초','광암',
 ];
 
-function searchRoutes(fromState, toState, searchTime) {
-  const dayType   = getDayType();
-  const baseMin   = searchTime.getHours()*60 + searchTime.getMinutes();
-  const results   = [];
+// coords에서 정류장 이름으로 인덱스 반환
+// 1순위: 정확 매칭 / 2순위: 포함 매칭(짧은 이름 우선)
+function findIdxByName(coords, name) {
+  if (!name || !coords.length) return -1;
+  let idx = coords.findIndex(c => c.name === name);
+  if (idx !== -1) return idx;
+  const candidates = coords
+    .map((c, i) => ({ i, n: c.name || '' }))
+    .filter(c => c.n.includes(name) || name.includes(c.n))
+    .sort((a, b) => a.n.length - b.n.length);
+  return candidates.length ? candidates[0].i : -1;
+}
 
-  // 출발/도착 좌표
-  const fromLat = fromState?.isGps ? STATE.myLocation.lat : fromState?.lat;
-  const fromLng = fromState?.isGps ? STATE.myLocation.lng : fromState?.lng;
-  const toLat   = toState?.lat;
-  const toLng   = toState?.lng;
+// 환승 허브용 좌표 매칭 (300m 이내)
+function findIdxByCoord(coords, lat, lng, radiusM = 300) {
+  let best = -1, bestD = radiusM;
+  coords.forEach((c, i) => {
+    if (!c.lat) return;
+    const d = distM(c.lat, c.lng, lat, lng);
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
 
-  if (!toLat) return [];
+// hub 인덱스: 이름 우선, 없으면 좌표 300m
+function findHubIdx(coords, hubName, hLat, hLng) {
+  const byName = findIdxByName(coords, hubName);
+  return byName !== -1 ? byName : findIdxByCoord(coords, hLat, hLng, 300);
+}
 
-  const toCoords   = getNearbyCoords(toLat, toLng, 300);
-  const fromCoords = (fromLat && !fromState?.isGps) ? getNearbyCoords(fromLat, fromLng, 300) : null;
+// 구간 소요시간 계산
+function segMin(coords, fromIdx, toIdx, routeDist) {
+  const fc = coords[fromIdx], tc = coords[toIdx];
+  const km = (fc?.lat && tc?.lat)
+    ? distM(fc.lat, fc.lng, tc.lat, tc.lng) / 1000
+    : (routeDist || 10);
+  return Math.round(km * 2.5 + 3);
+}
 
-  // ── 직행 탐색 ──
+// ── 직행 탐색 ──
+function searchDirect(fromName, toName, baseMin, dayType) {
+  const results = [];
   for (const route of ROUTES) {
     const coords = getRouteCoords(route);
-    if (!coords.length) continue;
+    if (coords.length < 2) continue;
 
-    const toIdx = findSnapIdxMulti(coords, toCoords, 500);
+    const toIdx   = findIdxByName(coords, toName);
     if (toIdx === -1) continue;
 
-    let fromIdx = -1;
-    if (fromLat) {
-      fromIdx = fromCoords
-        ? findSnapIdxMulti(coords, fromCoords, 1500)
-        : findSnapIdx(coords, fromLat, fromLng, 1500);
-    }
-    if (!fromState?.isGps && fromIdx === -1) continue;
-    if (fromIdx !== -1 && fromIdx >= toIdx) continue;
+    const fromIdx = fromName ? findIdxByName(coords, fromName) : 0;
+    if (fromName && fromIdx === -1) continue;
+    if (fromIdx >= toIdx) continue;
 
     const nextMin = getNextBusMin(route, baseMin, dayType);
     if (nextMin === null) continue;
 
-    const fromC = (fromIdx>=0&&coords[fromIdx]) ? coords[fromIdx] : (fromLat?{lat:fromLat,lng:fromLng}:null);
-    const toC   = coords[toIdx];
-    const segKm = (fromC?.lat&&toC?.lat) ? distM(fromC.lat,fromC.lng,toC.lat,toC.lng)/1000 : (route['거리']||10);
-    const mins  = Math.round(segKm*2.5+3);
-
+    const mins = segMin(coords, fromIdx, toIdx, route['거리']);
     results.push({
-      type: 'direct',
-      route, coords,
-      nextMin,
-      boardMin: nextMin,
-      arriveMin: nextMin + mins,
-      minutes: mins,
+      type: 'direct', route, coords,
+      nextMin, boardMin: nextMin, arriveMin: nextMin + mins, minutes: mins,
+      boardStop:  coords[fromIdx]?.name || route['기점'],
+      alightStop: coords[toIdx]?.name   || route['종점'],
       fromIdx, toIdx, dayType,
     });
   }
+  return results;
+}
 
-  // ── 환승 탐색 ──
+// ── 환승 탐색 ──
+function searchTransfer(fromName, toName, baseMin, dayType) {
+  const results = [];
   const ck = getCountKey(dayType);
 
   for (const hubName of TRANSFER_HUBS) {
-    const hubStop = STOPS.find(s => s.name.includes(hubName.substring(0,3)));
+    const hubStop = STOPS.find(s => s.name === hubName)
+                 || STOPS.find(s => s.name.includes(hubName.substring(0, 3)));
     if (!hubStop) continue;
-    const { lat:hLat, lng:hLng } = hubStop;
+    const { lat: hLat, lng: hLng } = hubStop;
 
-    // 허브 방향 체크 (되돌아가는 허브 제거)
-    if (fromLat && toLat) {
-      if (distM(hLat,hLng,toLat,toLng) >= distM(fromLat,fromLng,toLat,toLng)) continue;
-    }
-
-    // 1구간 후보: from → hub
+    // 1구간: from → hub
     const leg1 = ROUTES.filter(r => {
+      if (!(r[ck] > 0)) return false;
       const c = getRouteCoords(r);
-      const hi = findSnapIdx(c, hLat, hLng, 1000);
+      if (c.length < 2) return false;
+      const hi = findHubIdx(c, hubName, hLat, hLng);
       if (hi === -1) return false;
-      if (!fromLat) return true;
-      const fi = fromCoords ? findSnapIdxMulti(c, fromCoords, 1500) : findSnapIdx(c, fromLat, fromLng, 1500);
-      return (fromState?.isGps || fi !== -1) && (fi === -1 || fi < hi) && (r[ck] > 0);
+      const fi = fromName ? findIdxByName(c, fromName) : 0;
+      if (fromName && fi === -1) return false;
+      return fi < hi;
     });
 
-    // 2구간 후보: hub → to
+    // 2구간: hub → to
     const leg2 = ROUTES.filter(r => {
+      if (!(r[ck] > 0)) return false;
       const c = getRouteCoords(r);
-      const hi = findSnapIdx(c, hLat, hLng, 1000);
-      const ti = findSnapIdxMulti(c, toCoords, 500);
-      return hi !== -1 && ti !== -1 && hi < ti && (r[ck] > 0);
+      if (c.length < 2) return false;
+      const hi = findHubIdx(c, hubName, hLat, hLng);
+      if (hi === -1) return false;
+      const ti = findIdxByName(c, toName);
+      return ti !== -1 && hi < ti;
     });
 
     if (!leg1.length || !leg2.length) continue;
 
-    // 2구간 각각에 대해 1구간 매칭
     for (const r2 of leg2) {
-      const c2     = getRouteCoords(r2);
-      const r2hub  = findSnapIdx(c2, hLat, hLng, 1000);
-      const r2to   = findSnapIdxMulti(c2, toCoords, 500);
-      const leg2km = (c2[r2hub]&&c2[r2to]) ? distM(c2[r2hub].lat,c2[r2hub].lng,c2[r2to].lat,c2[r2to].lng)/1000 : 5;
-      const leg2min= Math.round(leg2km*2.5+3);
+      const c2   = getRouteCoords(r2);
+      const r2hi = findHubIdx(c2, hubName, hLat, hLng);
+      const r2ti = findIdxByName(c2, toName);
+      if (r2hi === -1 || r2ti === -1) continue;
 
-      const r2times = getRouteTimes(r2, dayType).filter(t=>t>=baseMin);
+      const leg2min = segMin(c2, r2hi, r2ti, r2['거리']);
+      const r2times = getRouteTimes(r2, dayType).filter(t => t >= baseMin);
       if (!r2times.length) continue;
 
       for (const r1 of leg1) {
-        const c1    = getRouteCoords(r1);
-        const r1hub = findSnapIdx(c1, hLat, hLng, 1000);
-        const r1fr  = fromLat ? (fromCoords ? findSnapIdxMulti(c1, fromCoords, 1500) : findSnapIdx(c1, fromLat, fromLng, 1500)) : 0;
-        if (r1hub === -1) continue;
+        const c1   = getRouteCoords(r1);
+        const r1hi = findHubIdx(c1, hubName, hLat, hLng);
+        if (r1hi === -1) continue;
+        const r1fi = fromName ? findIdxByName(c1, fromName) : 0;
+        if (fromName && r1fi === -1) continue;
 
-        const leg0km = (r1fr>0&&c1[0]&&c1[r1fr]) ? distM(c1[0].lat,c1[0].lng,c1[r1fr].lat,c1[r1fr].lng)/1000 : 0;
-        const leg1km = (c1[r1fr]&&c1[r1hub]) ? distM(c1[r1fr]?.lat||0,c1[r1fr]?.lng||0,c1[r1hub].lat,c1[r1hub].lng)/1000 : 3;
-        const leg0min= Math.round(leg0km*2.5);
-        const leg1min= Math.round(leg1km*2.5+3);
-
+        const leg1min = segMin(c1, r1fi, r1hi, r1['거리']);
         const r1times = getRouteTimes(r1, dayType);
 
         for (const bus2dep of r2times) {
-          const needHubBy = bus2dep - 5; // 환승까지 5분 여유
-
+          const needHubBy = bus2dep - 5;
           let bestBus1 = null;
           for (const dep of r1times) {
-            const boardMin  = dep + leg0min;
-            if (boardMin < baseMin) continue;
-            const hubArrMin = boardMin + leg1min;
-            if (hubArrMin <= needHubBy) { bestBus1 = { dep, boardMin, hubArrMin }; break; }
+            if (dep < baseMin) continue;
+            if (dep + leg1min <= needHubBy) { bestBus1 = { dep, boardMin: dep, hubArrMin: dep + leg1min }; break; }
           }
           if (!bestBus1) continue;
 
-          const hub2boardMin = bus2dep; // 2구간 실제 탑승
-          const arriveMin    = hub2boardMin + leg2min;
-          const totalMin     = arriveMin - bestBus1.boardMin;
-
+          const arriveMin = bus2dep + leg2min;
+          const totalMin  = arriveMin - bestBus1.boardMin;
           const dup = results.some(res =>
             res.type === 'transfer' &&
-            res.route['번호'] === r1['번호'] &&
+            res.route['번호']  === r1['번호'] &&
             res.route2['번호'] === r2['번호'] &&
-            res.nextMin === bestBus1.dep
+            res.nextMin        === bestBus1.dep
           );
           if (dup) continue;
 
           results.push({
             type: 'transfer',
-            route: r1, route2: r2,
-            coords: c1, coords2: c2,
-            nextMin: bestBus1.dep,
-            boardMin: bestBus1.boardMin,
-            hubArrMin: bestBus1.hubArrMin,
-            hub2BoardMin: hub2boardMin,
-            arriveMin,
-            minutes: totalMin,
-            transferHub: hubName,
-            dayType,
+            route: r1, route2: r2, coords: c1, coords2: c2,
+            nextMin:      bestBus1.dep,
+            boardMin:     bestBus1.boardMin,
+            hubArrMin:    bestBus1.hubArrMin,
+            hub2BoardMin: bus2dep,
+            arriveMin, minutes: totalMin,
+            transferHub:  hubName,
+            boardStop:    c1[r1fi]?.name || r1['기점'],
+            alightStop:   c2[r2ti]?.name || r2['종점'],
+            fromIdx: r1fi, toIdx: r2ti, toIdx2: r2ti, dayType,
           });
           break;
         }
       }
     }
   }
+  return results;
+}
 
-  // ── 정렬 ──
-  results.sort((a, b) => {
-    // 직행 우선 (단, 직행 대기 > 환승 대기 + 30분이면 환승 우선)
+// ── 메인 진입점 ──
+function searchRoutes(fromState, toState, searchTime) {
+  const dayType = getDayType();
+  const baseMin = searchTime.getHours() * 60 + searchTime.getMinutes();
+  const fromName = fromState?.isGps ? null : (fromState?.name || null);
+  const toName   = toState?.name || null;
+  if (!toName) return [];
+
+  const all = [...searchDirect(fromName, toName, baseMin, dayType),
+               ...searchTransfer(fromName, toName, baseMin, dayType)];
+
+  all.sort((a, b) => {
     if (a.type !== b.type) {
-      const directWait  = a.type==='direct' ? a.boardMin : b.boardMin;
-      const transferWait= a.type==='direct' ? b.boardMin : a.boardMin;
-      if (directWait - transferWait > 30) return a.type==='direct' ? 1 : -1;
-      return a.type==='direct' ? -1 : 1;
+      const dw = a.type === 'direct' ? a.boardMin : b.boardMin;
+      const tw = a.type === 'direct' ? b.boardMin : a.boardMin;
+      if (dw - tw > 30) return a.type === 'direct' ? 1 : -1;
+      return a.type === 'direct' ? -1 : 1;
     }
     if (Math.abs(a.boardMin - b.boardMin) > 3) return a.boardMin - b.boardMin;
     return a.minutes - b.minutes;
   });
 
-  return results.slice(0, 3);
+  return all.slice(0, 3);
 }
 
-// 복귀 경로 찾기
+// ── 복귀 경로 ──
 function findReturnRoute(toState, fromState, baseMin, dayType) {
-  const retFromLat = toState?.lat, retFromLng = toState?.lng;
-  const retToLat   = fromState?.isGps ? STATE.myLocation.lat : fromState?.lat;
-  const retToLng   = fromState?.isGps ? STATE.myLocation.lng : fromState?.lng;
-  if (!retFromLat || !retToLat) return null;
+  const retFromName = toState?.name   || null;
+  const retToName   = fromState?.isGps ? null : (fromState?.name || null);
+  if (!retFromName) return null;
 
   const ck = getCountKey(dayType);
-  const retFromCoords = getNearbyCoords(retFromLat, retFromLng, 300);
-  const retToCoords   = getNearbyCoords(retToLat, retToLng, 300);
 
-  // 직행
+  // 직행 복귀
   const directs = ROUTES.filter(r => {
-    const c = getRouteCoords(r);
-    const fi = findSnapIdxMulti(c, retFromCoords, 300);
-    const ti = findSnapIdxMulti(c, retToCoords, 300);
-    return fi !== -1 && ti !== -1 && fi < ti && (r[ck]>0);
+    if (!(r[ck] > 0)) return false;
+    const c  = getRouteCoords(r);
+    if (c.length < 2) return false;
+    const fi = findIdxByName(c, retFromName);
+    if (fi === -1) return false;
+    if (retToName) {
+      const ti = findIdxByName(c, retToName);
+      return ti !== -1 && fi < ti;
+    }
+    return fi < c.length - 1;
   });
+
   if (directs.length) {
-    directs.sort((a,b)=>(b[ck]||0)-(a[ck]||0));
-    const r = directs[0];
+    directs.sort((a, b) => (b[ck] || 0) - (a[ck] || 0));
+    const r  = directs[0];
+    const c  = getRouteCoords(r);
+    const fi = findIdxByName(c, retFromName);
+    const ti = retToName ? findIdxByName(c, retToName) : c.length - 1;
     const nextMin = getNextBusMin(r, baseMin, dayType);
-    return nextMin !== null ? { type:'direct', route:r, nextMin } : null;
+    if (nextMin === null) return null;
+    const mins = segMin(c, fi, ti, r['거리']);
+    return {
+      type: 'direct', route: r, coords: c,
+      nextMin, boardMin: nextMin, arriveMin: nextMin + mins, minutes: mins,
+      boardStop:  c[fi]?.name || r['기점'],
+      alightStop: c[ti]?.name || r['종점'],
+      fromIdx: fi, toIdx: ti, dayType,
+    };
   }
 
-  // 환승
+  // 환승 복귀
   for (const hubName of TRANSFER_HUBS) {
-    const hs = STOPS.find(s=>s.name.includes(hubName.substring(0,3)));
-    if (!hs) continue;
-    const leg1 = ROUTES.filter(r=>{
-      const c=getRouteCoords(r);
-      const hi=findSnapIdx(c,hs.lat,hs.lng,1000);
-      const fi=findSnapIdxMulti(c,retFromCoords,300);
-      return fi!==-1&&hi!==-1&&fi<hi&&(r[ck]>0);
+    const hubStop = STOPS.find(s => s.name === hubName)
+                 || STOPS.find(s => s.name.includes(hubName.substring(0, 3)));
+    if (!hubStop) continue;
+    const { lat: hLat, lng: hLng } = hubStop;
+
+    const leg1 = ROUTES.filter(r => {
+      if (!(r[ck] > 0)) return false;
+      const c  = getRouteCoords(r);
+      const fi = findIdxByName(c, retFromName);
+      if (fi === -1) return false;
+      const hi = findHubIdx(c, hubName, hLat, hLng);
+      return hi !== -1 && fi < hi;
     });
-    const leg2 = ROUTES.filter(r=>{
-      const c=getRouteCoords(r);
-      const hi=findSnapIdx(c,hs.lat,hs.lng,1000);
-      const ti=findSnapIdxMulti(c,retToCoords,300);
-      return hi!==-1&&ti!==-1&&hi<ti&&(r[ck]>0);
+
+    const leg2 = ROUTES.filter(r => {
+      if (!(r[ck] > 0)) return false;
+      const c  = getRouteCoords(r);
+      const hi = findHubIdx(c, hubName, hLat, hLng);
+      if (hi === -1) return false;
+      if (retToName) {
+        const ti = findIdxByName(c, retToName);
+        return ti !== -1 && hi < ti;
+      }
+      return hi < c.length - 1;
     });
-    if (leg1.length && leg2.length) {
-      leg1.sort((a,b)=>(b[ck]||0)-(a[ck]||0));
-      leg2.sort((a,b)=>(b[ck]||0)-(a[ck]||0));
-      const r1=leg1[0], r2=leg2[0];
-      const nextMin=getNextBusMin(r1,baseMin,dayType);
-      return nextMin!==null ? { type:'transfer', route:r1, route2:r2, nextMin, transferHub:hubName } : null;
-    }
+
+    if (!leg1.length || !leg2.length) continue;
+
+    leg1.sort((a, b) => (b[ck] || 0) - (a[ck] || 0));
+    leg2.sort((a, b) => (b[ck] || 0) - (a[ck] || 0));
+    const r1 = leg1[0], r2 = leg2[0];
+    const c1 = getRouteCoords(r1), c2 = getRouteCoords(r2);
+    const fi  = findIdxByName(c1, retFromName);
+    const hi1 = findHubIdx(c1, hubName, hLat, hLng);
+    const hi2 = findHubIdx(c2, hubName, hLat, hLng);
+    const ti  = retToName ? findIdxByName(c2, retToName) : c2.length - 1;
+    const nextMin = getNextBusMin(r1, baseMin, dayType);
+    if (nextMin === null) continue;
+    const l1min = segMin(c1, fi, hi1, r1['거리']);
+    const l2min = segMin(c2, hi2, ti,  r2['거리']);
+    const hubMin = nextMin + l1min;
+    const arrMin = hubMin  + l2min;
+    return {
+      type: 'transfer', route: r1, route2: r2, coords: c1, coords2: c2,
+      nextMin, boardMin: nextMin, hub2BoardMin: hubMin, arriveMin: arrMin,
+      minutes: arrMin - nextMin, transferHub: hubName,
+      boardStop:  c1[fi]?.name  || r1['기점'],
+      alightStop: c2[ti]?.name  || r2['종점'],
+      fromIdx: fi, toIdx: ti, toIdx2: ti, dayType,
+    };
   }
   return null;
 }

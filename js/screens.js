@@ -130,45 +130,44 @@ function selectStopForTimetable(name, disp, lat, lng) {
 function renderStopTimetable(stopName, displayName, lat, lng) {
   const dayType = getDayType();
   const nMin    = nowMin();
-  const stopCoords = getNearbyCoords(lat, lng, 300);
   const HUBS = ['서천터미널','한산공용터미널','장항터미널','서천역','판교','기산','문산','화양','비인','마서','종천','장항읍내'];
 
   const rows = [];
   ROUTES.forEach(route => {
     const coords = getRouteCoords(route);
     if (!coords.length) return;
-    const idx = findSnapIdxMulti(coords, stopCoords, 300);
+
+    // 이름 기반 인덱스 — 이름 매칭 안 되면 300m 좌표 fallback
+    let idx = findIdxByName(coords, stopName);
+    if (idx === -1) idx = findIdxByCoord(coords, lat, lng, 300);
     if (idx === -1) return;
 
     const ck    = getCountKey(dayType);
     const count = route[ck]||0;
     if (!count||!route['첫차']||!route['막차']) return;
 
-    const totalMin = Math.round((route['거리']||10)*2.5+5);
-    const len      = Math.max(coords.length-1,1);
-    const leg0     = Math.round(totalMin*idx/len);
+    // 기점에서 이 정류장까지 소요시간 추정
+    const fc = coords[0], sc = coords[idx];
+    const leg0 = (fc?.lat && sc?.lat)
+      ? Math.round(distM(fc.lat, fc.lng, sc.lat, sc.lng) / 1000 * 2.5)
+      : Math.round((route['거리']||10) * 2.5 * idx / Math.max(coords.length-1,1));
 
-    // 주요경유 (이 정류장 이후 허브)
-    const via = [route['기점'], ...route['경유'].split('→').map(s=>s.trim()).filter(Boolean), route['종점']];
+    // 이 정류장 이후 주요 경유지 (coords 기반)
     const afterHubs = [];
-    let passed = false;
-    for (const v of via) {
-      if (v.includes(stopName.substring(0,3))) passed=true;
-      if (passed && afterHubs.length<3) {
-        const h=HUBS.find(h=>v.includes(h.substring(0,3)));
-        if (h&&!afterHubs.includes(h)) afterHubs.push(h);
-      }
+    for (let i = idx+1; i < coords.length && afterHubs.length < 3; i++) {
+      const h = HUBS.find(h => coords[i].name?.includes(h.substring(0,3)));
+      if (h && !afterHubs.includes(h)) afterHubs.push(h);
     }
 
     const color  = getZoneColor(route);
     const busNum = getBusNum(route);
-    const fMin   = timeToMin(route['첫차']), lMin=timeToMin(route['막차']);
-    const interval = count>1?Math.round((lMin-fMin)/(count-1)):0;
+    const fMin   = timeToMin(route['첫차']), lMin = timeToMin(route['막차']);
+    const interval = count > 1 ? Math.round((lMin-fMin)/(count-1)) : 0;
 
-    for (let i=0;i<count;i++) {
-      const depMin  = fMin+interval*i;
-      const passMin = depMin+leg0;
-      rows.push({ passMin, isPast:passMin<nMin, color, busNum, via:afterHubs.join('→'), terminus:route['종점'], remark:'' });
+    for (let i = 0; i < count; i++) {
+      const depMin  = fMin + interval * i;
+      const passMin = depMin + leg0;
+      rows.push({ passMin, isPast: passMin < nMin, color, busNum, via: afterHubs.join('→'), terminus: route['종점'], remark: '' });
     }
   });
 
