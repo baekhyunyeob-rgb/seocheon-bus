@@ -96,7 +96,8 @@ function snapStopsToPolyline(polyline, stops) {
   for (const stop of stops) {
     const snap = _snapStopToPolyline(stop, polyline);
     if (snap && snap.perp <= SNAP_RADIUS_M) {
-      snapped.push({ name: stop.name, displayName: stop.displayName||stop.name, lat: stop.lat, lng: stop.lng, tGlobal: snap.tGlobal });
+      // source: 'stops_data' = stops.json에서 찾은 정류장 (도로 스냅 성공)
+      snapped.push({ name: stop.name, displayName: stop.displayName||stop.name, lat: stop.lat, lng: stop.lng, tGlobal: snap.tGlobal, source: 'stops_data' });
     }
   }
 
@@ -107,7 +108,7 @@ function snapStopsToPolyline(polyline, stops) {
   for (const s of snapped) {
     const prev = result[result.length-1];
     if (prev && prev.name === s.name && distM(prev.lat,prev.lng,s.lat,s.lng) < DEDUP_DIST_M) continue;
-    result.push({ name: s.name, displayName: s.displayName, lat: s.lat, lng: s.lng });
+    result.push({ name: s.name, displayName: s.displayName, lat: s.lat, lng: s.lng, source: s.source });
   }
   return result;
 }
@@ -122,9 +123,10 @@ function insertAnchors(stops, anchors, polyline) {
     const tGlobal = snap ? snap.tGlobal : (result.length > 0 ? result[result.length-1]._t+0.001 : 0);
     let insertIdx = result.findIndex(s => (s._t||0) > tGlobal);
     if (insertIdx === -1) insertIdx = result.length;
-    result.splice(insertIdx, 0, { name: anchor.name, displayName: anchor.name, lat: anchor.lat, lng: anchor.lng, _t: tGlobal });
+    // source: 'snapped' = 카카오 도로 경로에서만 찾아진 정류장 (stops.json에 없거나 반경 밖)
+    result.splice(insertIdx, 0, { name: anchor.name, displayName: anchor.name, lat: anchor.lat, lng: anchor.lng, _t: tGlobal, source: 'snapped' });
   }
-  return result.map(({ name, displayName, lat, lng }) => ({ name, displayName, lat, lng }));
+  return result.map(({ name, displayName, lat, lng, source }) => ({ name, displayName, lat, lng, source: source||'stops_data' }));
 }
 
 // ---- 진행상태 오버레이 ----
@@ -147,7 +149,7 @@ function _hideBuildProgress() {
 async function buildRouteCoords() {
   // 캐시 확인
   try {
-    const cached = localStorage.getItem('sc_route_coords_v3');
+    const cached = localStorage.getItem('sc_route_coords_v4');
     if (cached) {
       const data = JSON.parse(cached);
       for (const [key, val] of Object.entries(data)) {
@@ -204,9 +206,9 @@ async function buildRouteCoords() {
   try {
     const obj = {};
     STATE.routeCoords.forEach((v, k) => {
-      obj[k] = v.map(c => ({ name: c.name, lat: c.lat, lng: c.lng }));
+      obj[k] = v.map(c => ({ name: c.name, lat: c.lat, lng: c.lng, source: c.source||'stops_data' }));
     });
-    localStorage.setItem('sc_route_coords_v3', JSON.stringify(obj));
+    localStorage.setItem('sc_route_coords_v4', JSON.stringify(obj));
   } catch (e) {
     console.warn('localStorage 저장 실패 (용량 초과 가능성):', e);
     // 용량 초과 시 정류장 5개 이상 노선만 저장
@@ -215,7 +217,7 @@ async function buildRouteCoords() {
       STATE.routeCoords.forEach((v, k) => {
         if (v.length >= 2) obj[k] = v.map(c => ({ name: c.name, lat: c.lat, lng: c.lng }));
       });
-      localStorage.setItem('sc_route_coords_v3', JSON.stringify(obj));
+      localStorage.setItem('sc_route_coords_v4', JSON.stringify(obj));
       console.log('부분 저장 완료');
     } catch (e2) {
       console.warn('부분 저장도 실패:', e2);

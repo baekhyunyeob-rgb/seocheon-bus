@@ -79,15 +79,44 @@ function renderStopResults(results, container, append=false) {
   const html = results.map(s => {
     const disp = s.displayName||s.name;
     const diffName = disp!==s.name ? `<div class="modal-item-sub">${s.name}</div>` : '';
-    return `<div class="modal-item" onclick="selectPlace('${_placeTarget}',${JSON.stringify({name:s.name,displayName:disp,lat:s.lat,lng:s.lng}).replace(/"/g,'&quot;')})">
-      <div class="modal-item-icon" style="background:var(--green-l)">
+    const placeData = JSON.stringify({name:s.name,displayName:disp,lat:s.lat,lng:s.lng}).replace(/"/g,'&quot;');
+    const isSaved = STATE.savedPlaces.some(p => p.name===s.name);
+    const starColor = isSaved ? '#EF9F27' : '#ccc';
+    const starFill  = isSaved ? '#EF9F27' : 'none';
+    return `<div class="modal-item" style="position:relative">
+      <div class="modal-item-icon" style="background:var(--green-l)" onclick="selectPlace('${_placeTarget}',${placeData})">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#1D9E75"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
       </div>
-      <div><div class="modal-item-name">${disp}</div>${diffName}</div>
+      <div style="flex:1;min-width:0" onclick="selectPlace('${_placeTarget}',${placeData})">
+        <div class="modal-item-name">${disp}</div>${diffName}
+      </div>
+      <button onclick="toggleSavePlace(${placeData},this)" style="background:none;border:none;padding:4px 6px;cursor:pointer;flex-shrink:0" title="즐겨찾기 ${isSaved?'해제':'등록'}">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="${starFill}" stroke="${starColor}" stroke-width="1.4">
+          <path d="M9 1.5l2.09 4.24 4.68.68-3.39 3.3.8 4.67L9 12.02l-4.18 2.37.8-4.67L2.23 6.42l4.68-.68z" stroke-linejoin="round"/>
+        </svg>
+      </button>
     </div>`;
   }).join('');
   if (append) container.innerHTML += html;
   else container.innerHTML = `<div class="modal-section-label">정류장 검색 결과</div>${html}`;
+}
+
+function toggleSavePlace(place, btn) {
+  if (typeof place === 'string') place = JSON.parse(place);
+  const idx = STATE.savedPlaces.findIndex(p => p.name === place.name);
+  if (idx >= 0) {
+    STATE.savedPlaces.splice(idx, 1);
+  } else {
+    STATE.savedPlaces.push({ name: place.name, displayName: place.displayName||place.name, lat: place.lat, lng: place.lng });
+  }
+  localStorage.setItem('sc_places', JSON.stringify(STATE.savedPlaces));
+  const saved = STATE.savedPlaces.some(p => p.name === place.name);
+  const svg = btn.querySelector('svg');
+  if (svg) {
+    svg.setAttribute('fill', saved ? '#EF9F27' : 'none');
+    svg.setAttribute('stroke', saved ? '#EF9F27' : '#ccc');
+  }
+  btn.title = saved ? '즐겨찾기 해제' : '즐겨찾기 등록';
 }
 
 function selectPlace(target, place) {
@@ -187,7 +216,7 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     <span class="tt-stop-meta">${routeCount}개 노선 · ${rows.length}대</span>
   </div>
   <div class="tt-grid-header">
-    <div>시간</div><div>번호</div><div>기점</div><div>주요경유</div><div>종점</div><div>비고</div>
+    <div>시간</div><div>번호</div><div>주요경유</div><div>종점</div>
   </div>`;
 
   rows.forEach((r,i) => {
@@ -195,10 +224,8 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     html+=`<div class="tt-row${r.isPast?' past':isNext?' next-bus':''}">
       <div class="tt-time${r.isPast?' past':isNext?' next':''}">${minToTime(r.passMin)}</div>
       <div><span class="bus-pill" style="background:${r.color};font-size:10px;padding:1px 5px">${r.busNum}</span></div>
-      <div class="tt-route">${rows[i]?.terminus?rows[i].via.split('→')[0]||r.busNum:''}</div>
       <div class="tt-route">${r.via}</div>
       <div class="tt-dest">${r.terminus}</div>
-      <div class="tt-remark">${r.remark}</div>
     </div>`;
   });
 
@@ -215,8 +242,8 @@ function renderZoneLegend() {
   const el = document.getElementById('zone-pills');
   if (!el) return;
   el.innerHTML = ZONES.slice(0,4).map(z =>
-    `<div class="zone-pill" id="zone-pill-${z.id}" onclick="filterByZone('${z.id}')" style="color:${z.color}">
-      <div class="zone-dot" style="background:${z.color}"></div>
+    `<div class="zone-badge" id="zone-pill-${z.id}" onclick="filterByZone('${z.id}')"
+      style="background:${z.color}">
       <span>${z.name}</span>
     </div>`
   ).join('');
@@ -226,7 +253,7 @@ function filterByZone(zoneId) {
   const isActive = STATE.selectedZone === zoneId;
   STATE.selectedZone = isActive ? null : zoneId;
 
-  document.querySelectorAll('.zone-pill').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.zone-badge').forEach(p => p.classList.remove('active'));
   if (!isActive) document.getElementById('zone-pill-'+zoneId)?.classList.add('active');
 
   renderRouteList(STATE.selectedZone);
@@ -473,7 +500,10 @@ function renderTerminalGrid(body, data) {
     html+=`</div>`;
   }
   html+=`</div>
-  <div style="padding:10px 12px;font-size:10px;color:var(--text-3)">익산행은 군산 경유 ※ 실제 시간표와 다를 수 있습니다</div>
+  <div style="padding:10px 12px 4px;font-size:10px;color:var(--text-3);line-height:1.6">
+    ⚠️ 실제 운행 시간표와 다를 수 있습니다. 이용 전 터미널에 직접 확인하세요.
+  </div>
+  <div style="padding:2px 12px 10px;font-size:10px;color:var(--text-3)">익산행은 군산 경유</div>
   <div style="padding:0 12px 14px">
     <button class="book-btn" style="background:var(--amber)" onclick="window.open('${bookUrl}')">${bookLabel} 바로가기</button>
   </div>`;

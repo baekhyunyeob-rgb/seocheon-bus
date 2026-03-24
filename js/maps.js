@@ -258,12 +258,17 @@ function showRouteOnMap(route) {
     STATE.routeMarkers.push(tri);
   });
 
-  // 중간 정류장 점
+  // 중간 정류장 점 (stops.json 출처: 노선색, 카카오 스냅 출처: 적색)
   coords.forEach((c,i) => {
     if (i===0||i===coords.length-1) return;
+    const isSnapped = c.source === 'snapped';
+    const dotColor  = isSnapped ? '#E24B4A' : color;
+    const dotSize   = isSnapped ? '7px' : '5px';
+    const border    = isSnapped ? '2px solid #fff' : '1.5px solid #fff';
+    const title     = isSnapped ? `title="${c.name} (도로스냅)"` : `title="${c.name}"`;
     const dot = new kakao.maps.CustomOverlay({
       position: new kakao.maps.LatLng(c.lat,c.lng),
-      content: `<div style="width:5px;height:5px;background:${color};border:1.5px solid #fff;border-radius:50%"></div>`,
+      content: `<div ${title} style="width:${dotSize};height:${dotSize};background:${dotColor};border:${border};border-radius:50%;cursor:default"></div>`,
       yAnchor:0.5, zIndex:2,
     });
     dot.setMap(STATE.mapRoutes);
