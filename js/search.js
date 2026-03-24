@@ -141,7 +141,13 @@ function searchTransfer(fromName, toName, baseMin, dayType) {
           let bestBus1 = null;
           for (const dep of r1times) {
             if (dep < baseMin) continue;
-            if (dep + leg1min <= needHubBy) { bestBus1 = { dep, boardMin: dep, hubArrMin: dep + leg1min }; break; }
+            const hubArrMin = dep + leg1min;
+            // 허브 도착이 2구간 출발 5분 전 이내여야 하고
+            // 환승 대기가 60분 이하여야 함
+            if (hubArrMin <= needHubBy && bus2dep - hubArrMin <= 60) {
+              bestBus1 = { dep, boardMin: dep, hubArrMin };
+              break;
+            }
           }
           if (!bestBus1) continue;
 

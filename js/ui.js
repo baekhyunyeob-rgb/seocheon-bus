@@ -134,8 +134,20 @@ function getSearchTime() {
 function doSearch() {
   if (!STATE.search.to) { alert('도착지를 선택해주세요'); return; }
   const searchTime = getSearchTime();
-  const fromState  = STATE.search.from || { isGps:true, lat:STATE.myLocation.lat, lng:STATE.myLocation.lng };
-  const results    = searchRoutes(fromState, STATE.search.to, searchTime);
+  let fromState = STATE.search.from || { isGps:true, lat:STATE.myLocation.lat, lng:STATE.myLocation.lng };
+
+  // GPS 출발 시 가장 가까운 정류장 이름을 붙여줌 (복귀 경로용)
+  if (fromState.isGps && !fromState.name) {
+    const myLat = STATE.myLocation.lat, myLng = STATE.myLocation.lng;
+    let bestStop = null, bestD = Infinity;
+    STOPS.forEach(s => {
+      const d = distM(s.lat, s.lng, myLat, myLng);
+      if (d < bestD) { bestD = d; bestStop = s; }
+    });
+    if (bestStop) fromState = { ...fromState, name: bestStop.name, nearestStop: bestStop.name };
+  }
+
+  const results = searchRoutes(fromState, STATE.search.to, searchTime);
   STATE.searchResults = results;
 
   // 이력 저장
