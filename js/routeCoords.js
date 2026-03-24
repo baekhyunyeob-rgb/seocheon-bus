@@ -147,7 +147,22 @@ function _hideBuildProgress() {
 
 // ---- 메인 진입점 ----
 async function buildRouteCoords() {
-  // 캐시 확인
+  // 1순위: route_coords.json 파일 (배포 시 미리 구축된 데이터)
+  try {
+    const res = await fetch('data/route_coords.json');
+    if (res.ok) {
+      const data = await res.json();
+      for (const [key, val] of Object.entries(data)) {
+        STATE.routeCoords.set(key, val);
+      }
+      console.log(`노선 좌표 파일 로드: ${STATE.routeCoords.size}개`);
+      _showBuildProgress(`✅ 노선 데이터 로드 완료 (${STATE.routeCoords.size}개)`);
+      setTimeout(_hideBuildProgress, 2000);
+      return;
+    }
+  } catch {}
+
+  // 2순위: localStorage 캐시
   try {
     const cached = localStorage.getItem('sc_route_coords_v4');
     if (cached) {
@@ -162,7 +177,7 @@ async function buildRouteCoords() {
     }
   } catch {}
 
-  _showBuildProgress('노선 좌표 구축 중... (0 / ' + ROUTES.length + ')');
+  // 3순위: 카카오 API로 실시간 구축 (route_coords.json 없을 때 fallback)
   console.log('노선 좌표 구축 시작...');
   const total = ROUTES.length;
   let done = 0;
