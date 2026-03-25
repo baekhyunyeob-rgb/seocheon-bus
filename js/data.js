@@ -92,8 +92,8 @@ const STATE = {
   routeAnchors: [],
   // 지도 마커 캐시
   homeFromMarker: null, homeToMarker: null,
-  routePolyline: null, routeMarkers: [],
-  detailPolyline: null, detailMarkers: [],
+  routePolyline: null, routeMarkers: [], snappedMarkers: [],
+  detailPolyline: null, detailMarkers: [], detailSnappedMarkers: [],
   // 노선도
   selectedZone: null,
   selectedRoute: null,

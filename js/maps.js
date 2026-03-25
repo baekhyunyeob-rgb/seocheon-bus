@@ -156,7 +156,15 @@ function initDetailMap(result) {
   // 기존 오버레이 정리
   STATE.detailMarkers.forEach(m => m.setMap(null));
   STATE.detailMarkers = [];
+  STATE.detailSnappedMarkers.forEach(m => m.setMap(null));
+  STATE.detailSnappedMarkers = [];
   if (STATE.detailPolyline) { STATE.detailPolyline.setMap(null); STATE.detailPolyline=null; }
+
+  // snapped 마커 zoom 연동
+  kakao.maps.event.addListener(STATE.mapDetail, 'zoom_changed', () => {
+    const lv = STATE.mapDetail.getLevel();
+    STATE.detailSnappedMarkers.forEach(m => m.setMap(lv <= 4 ? STATE.mapDetail : null));
+  });
 
   const color = getZoneColor(result.route);
   const allCoords = getRouteCoords(result.route).filter(c=>c.lat);
@@ -201,16 +209,33 @@ function initDetailMap(result) {
     }
   }
 
-  // 정류장 점
+  // 정류장 점 (stops_data → 원형 항상 표시 / snapped → 다이아몬드+라벨 level<=4에서만)
+  const detailInitLevel = STATE.mapDetail.getLevel();
   segCoords.forEach((c,i) => {
     if (!c.lat || i===0||i===segCoords.length-1) return;
+    const isSnapped = c.source === 'snapped';
+    let content;
+    if (isSnapped) {
+      content = `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none">
+        <div style="background:#FF6B00;color:#fff;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);margin-bottom:2px">${c.name}</div>
+        <div style="width:8px;height:8px;background:#FF6B00;border:1.5px solid #fff;transform:rotate(45deg);box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>
+      </div>`;
+    } else {
+      content = `<div style="width:6px;height:6px;background:${color};border:1.5px solid #fff;border-radius:50%"></div>`;
+    }
     const dot = new kakao.maps.CustomOverlay({
       position: new kakao.maps.LatLng(c.lat,c.lng),
-      content: `<div style="width:6px;height:6px;background:${color};border:1.5px solid #fff;border-radius:50%"></div>`,
-      yAnchor:0.5, zIndex:3,
+      content,
+      yAnchor: isSnapped ? 1.8 : 0.5,
+      zIndex: isSnapped ? 5 : 3,
     });
-    dot.setMap(STATE.mapDetail);
-    STATE.detailMarkers.push(dot);
+    if (isSnapped) {
+      dot.setMap(detailInitLevel <= 4 ? STATE.mapDetail : null);
+      STATE.detailSnappedMarkers.push(dot);
+    } else {
+      dot.setMap(STATE.mapDetail);
+      STATE.detailMarkers.push(dot);
+    }
   });
 
   // 현재 위치
@@ -237,7 +262,11 @@ function initRoutesMap() {
     STATE.mapRoutes = new kakao.maps.Map(el, {
       center: new kakao.maps.LatLng(36.0758,126.6908), level:10,
     });
-    // 지도 준비 완료 → tryShow 루프가 돌고 있으면 즉시 표시
+    // snapped 마커 zoom 연동: level 4 이하(충분히 확대)일 때만 표시
+    kakao.maps.event.addListener(STATE.mapRoutes, 'zoom_changed', () => {
+      const lv = STATE.mapRoutes.getLevel();
+      STATE.snappedMarkers.forEach(m => m.setMap(lv <= 4 ? STATE.mapRoutes : null));
+    });
     if (STATE.selectedRoute) {
       showRouteOnMap(STATE.selectedRoute, STATE.timetableSearchStop || null);
     }
@@ -284,20 +313,38 @@ function showRouteOnMap(route, searchStop) {
   });
 
   // 중간 정류장 점
+  // stops_data(원본) → 노선색 원형 점 (항상 표시)
+  // snapped(검증필요) → 주황 다이아몬드 + 이름 라벨 (level<=4 확대 시에만 표시)
+  STATE.snappedMarkers.forEach(m => m.setMap(null));
+  STATE.snappedMarkers = [];
+  const currentLevel = STATE.mapRoutes.getLevel();
+
   coords.forEach((c,i) => {
     if (i===0||i===coords.length-1) return;
     const isSnapped = c.source === 'snapped';
-    const dotColor  = isSnapped ? '#E24B4A' : color;
-    const dotSize   = isSnapped ? '7px' : '5px';
-    const border    = isSnapped ? '2px solid #fff' : '1.5px solid #fff';
-    const title     = isSnapped ? `title="${c.name} (도로스냅)"` : `title="${c.name}"`;
+    let content;
+    if (isSnapped) {
+      content = `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none">
+        <div style="background:#FF6B00;color:#fff;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);margin-bottom:2px">${c.name}</div>
+        <div style="width:8px;height:8px;background:#FF6B00;border:1.5px solid #fff;transform:rotate(45deg);box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>
+      </div>`;
+    } else {
+      content = `<div style="width:5px;height:5px;background:${color};border:1.5px solid #fff;border-radius:50%"></div>`;
+    }
     const dot = new kakao.maps.CustomOverlay({
       position: new kakao.maps.LatLng(c.lat,c.lng),
-      content: `<div ${title} style="width:${dotSize};height:${dotSize};background:${dotColor};border:${border};border-radius:50%;cursor:default"></div>`,
-      yAnchor:0.5, zIndex:2,
+      content,
+      yAnchor: isSnapped ? 1.8 : 0.5,
+      zIndex: isSnapped ? 5 : 2,
     });
-    dot.setMap(STATE.mapRoutes);
-    STATE.routeMarkers.push(dot);
+    if (isSnapped) {
+      // 현재 zoom이 충분히 확대돼 있을 때만 즉시 표시, 아니면 숨김
+      dot.setMap(currentLevel <= 4 ? STATE.mapRoutes : null);
+      STATE.snappedMarkers.push(dot);
+    } else {
+      dot.setMap(STATE.mapRoutes);
+      STATE.routeMarkers.push(dot);
+    }
   });
 
   // 기점 핀 (파랑)
@@ -334,6 +381,7 @@ function showRouteOnMap(route, searchStop) {
 
 function clearRouteMap() {
   STATE.routeMarkers.forEach(m=>m.setMap(null)); STATE.routeMarkers=[];
+  STATE.snappedMarkers.forEach(m=>m.setMap(null)); STATE.snappedMarkers=[];
   if (STATE.routePolyline) { STATE.routePolyline.setMap(null); STATE.routePolyline=null; }
   if (STATE.mapRoutes) STATE.mapRoutes.setLevel(10);
 }

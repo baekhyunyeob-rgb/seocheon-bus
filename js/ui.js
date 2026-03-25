@@ -505,6 +505,11 @@ function renderDetailCard(result) {
   if (result.type === 'transfer') {
     const color2 = getZoneColor(result.route2);
     const num2   = getBusNum(result.route2);
+    // 결과 카드와 동일하게 coords 인덱스 기반으로 실제 탑승·하차 정류장 표시
+    const boardStop  = (result.fromIdx >= 0 && result.coords?.[result.fromIdx]?.name)
+                       ? result.coords[result.fromIdx].name : result.boardStop || result.route['기점'];
+    const alightStop = (result.toIdx2  >= 0 && result.coords2?.[result.toIdx2]?.name)
+                       ? result.coords2[result.toIdx2].name : result.alightStop || result.route2['종점'];
     container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
@@ -516,13 +521,18 @@ function renderDetailCard(result) {
         <span class="rc-duration">${formatDuration(result.minutes)}</span>
       </div>
       <div class="rc-journey">
-        <div class="rc-row"><span class="rc-time blue">${minToTime(result.boardMin)}</span><div class="rc-dot blue"></div><span class="rc-label">${result.route['기점']} 탑승</span></div>
+        <div class="rc-row"><span class="rc-time blue">${minToTime(result.boardMin)}</span><div class="rc-dot blue"></div><span class="rc-label">${boardStop} 탑승</span></div>
         <div class="rc-vline-wrap"><div class="rc-vline"></div></div>
         <div class="rc-row"><span class="rc-time orange">${minToTime(result.hub2BoardMin)}</span><div class="rc-dot orange"></div><span class="rc-label">${result.transferHub} 환승</span></div>
         <div class="rc-vline-wrap"><div class="rc-vline"></div></div>
-        <div class="rc-row"><span class="rc-time red">${minToTime(result.arriveMin)}</span><div class="rc-dot red"></div><span class="rc-label">${result.route2['종점']} 도착</span></div>
+        <div class="rc-row"><span class="rc-time red">${minToTime(result.arriveMin)}</span><div class="rc-dot red"></div><span class="rc-label">${alightStop} 도착</span></div>
       </div>`;
   } else {
+    // 결과 카드와 동일하게 coords 인덱스 기반으로 실제 탑승·하차 정류장 표시
+    const boardStop  = (result.fromIdx >= 0 && result.coords?.[result.fromIdx]?.name)
+                       ? result.coords[result.fromIdx].name : result.boardStop || result.route['기점'];
+    const alightStop = (result.toIdx   >= 0 && result.coords?.[result.toIdx]?.name)
+                       ? result.coords[result.toIdx].name   : result.alightStop || result.route['종점'];
     container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
         <div style="display:flex;align-items:center;gap:5px">
@@ -532,9 +542,9 @@ function renderDetailCard(result) {
         <span class="rc-duration">${formatDuration(result.minutes)}</span>
       </div>
       <div class="rc-journey">
-        <div class="rc-row"><span class="rc-time blue">${minToTime(result.boardMin)}</span><div class="rc-dot blue"></div><span class="rc-label">${result.route['기점']} 탑승</span></div>
+        <div class="rc-row"><span class="rc-time blue">${minToTime(result.boardMin)}</span><div class="rc-dot blue"></div><span class="rc-label">${boardStop} 탑승</span></div>
         <div class="rc-vline-wrap"><div class="rc-vline"></div></div>
-        <div class="rc-row"><span class="rc-time red">${minToTime(result.arriveMin)}</span><div class="rc-dot red"></div><span class="rc-label">${result.route['종점']} 도착</span></div>
+        <div class="rc-row"><span class="rc-time red">${minToTime(result.arriveMin)}</span><div class="rc-dot red"></div><span class="rc-label">${alightStop} 도착</span></div>
       </div>`;
   }
 }
@@ -543,60 +553,86 @@ function renderStopList(result) {
   const el = document.getElementById('stop-list');
   if (!el) return;
 
-  const coords   = result.coords || getRouteCoords(result.route);
-  const dayType  = result.dayType || getDayType();
-  const avgMin   = Math.round(result.minutes / Math.max(coords.length,1));
+  const allCoords = result.coords || getRouteCoords(result.route);
 
-  // 현재 내 위치에서 가장 가까운 정류장 인덱스
+  // ── 선택한 경로 구간(fromIdx ~ toIdx)만 잘라서 사용 ──
+  const segStart = result.fromIdx >= 0 ? result.fromIdx : 0;
+  const segEnd   = result.toIdx   >= 0 ? result.toIdx   : allCoords.length - 1;
+  const coords   = allCoords.slice(segStart, segEnd + 1);
+  const last     = coords.length - 1;
+
+  const avgMin = Math.round(result.minutes / Math.max(coords.length, 1));
+
+  // ── 현위치를 경로 구간 내 정류장 기준으로만 추적 ──
   const myLat = STATE.myLocation.lat, myLng = STATE.myLocation.lng;
-  const myI = findNearestIdx(coords, myLat, myLng) || 0;
+  const OFFROUTE_M = 500; // 500m 초과 시 이탈 판정
 
-  // 표시할 인덱스: 출발, 이전1, 현재, 이후1, 환승(있으면), 도착
-  const showSet = new Set([0, Math.max(0,myI-1), myI, Math.min(coords.length-1,myI+1), coords.length-1]);
+  let myI = 0, minDist = Infinity;
+  coords.forEach((c, i) => {
+    if (!c.lat) return;
+    const d = distM(c.lat, c.lng, myLat, myLng);
+    if (d < minDist) { minDist = d; myI = i; }
+  });
+  const isOffRoute = STATE.gpsReady && minDist > OFFROUTE_M;
 
-  // 환승 정류장 인덱스 추가 — 이름 기반
+  // ── 환승 정류장 인덱스 (구간 내 상대 인덱스로 변환) ──
   let hubIdx = -1;
   if (result.type === 'transfer') {
-    hubIdx = findIdxByName(coords, result.transferHub);
-    // 이름 매칭 안 되면 좌표 300m fallback
-    if (hubIdx === -1) {
+    let absIdx = findIdxByName(allCoords, result.transferHub);
+    if (absIdx === -1) {
       const hs = STOPS.find(s => s.name === result.transferHub)
-              || STOPS.find(s => s.name.includes(result.transferHub.substring(0,3)));
-      if (hs) hubIdx = findIdxByCoord(coords, hs.lat, hs.lng, 300);
+              || STOPS.find(s => s.name.includes(result.transferHub.substring(0, 3)));
+      if (hs) absIdx = findIdxByCoord(allCoords, hs.lat, hs.lng, 300);
     }
-    if (hubIdx >= 0) showSet.add(hubIdx);
+    if (absIdx >= segStart && absIdx <= segEnd) hubIdx = absIdx - segStart;
   }
 
+  // ── 표시할 인덱스: 출발, 현위치±1, 환승, 도착 ──
+  const showSet = new Set([
+    0,
+    Math.max(0, myI - 1),
+    myI,
+    Math.min(last, myI + 1),
+    last,
+  ]);
+  if (hubIdx >= 0) showSet.add(hubIdx);
+
+  // ── 이탈 배너 ──
   let html = '';
+  if (isOffRoute) {
+    html += `<div style="margin:8px 12px 4px;padding:9px 12px;background:#fff3cd;border-radius:10px;font-size:12px;color:#664d03;line-height:1.5">
+      ⚠️ 현재 위치가 선택한 경로에서 벗어났습니다
+    </div>`;
+  }
+
   let prevShown = -1;
 
-  coords.forEach((stop,i) => {
+  coords.forEach((stop, i) => {
     if (!showSet.has(i)) return;
 
-    // 줄임표
     if (prevShown >= 0 && i - prevShown > 1) {
       html += `<div class="stop-row" style="opacity:.5">
         <div class="stop-track"><div style="width:6px;height:6px;border-radius:50%;background:var(--text-3)"></div><div class="stop-vline"></div></div>
-        <span class="stop-name" style="color:var(--text-3);font-size:11px">··· ${i-prevShown-1}개 정류장</span>
+        <span class="stop-name" style="color:var(--text-3);font-size:11px">··· ${i - prevShown - 1}개 정류장</span>
       </div>`;
     }
     prevShown = i;
 
-    const isDone     = i < myI;
-    const isCurrent  = i === myI;
-    const isHub      = i === hubIdx;
-    const isStart    = i === 0;
-    const isEnd      = i === coords.length-1;
-    const hasLine    = i < coords.length-1;
+    const isDone    = !isOffRoute && i < myI;
+    const isCurrent = !isOffRoute && i === myI;
+    const isHub     = i === hubIdx;
+    const isStart   = i === 0;
+    const isEnd     = i === last;
+    const hasLine   = i < last;
 
     const etaMin = result.boardMin + i * avgMin;
     const etaStr = minToTime(etaMin);
 
     let circleClass = 'sc-normal';
-    if (isStart)   circleClass = 'sc-start';
-    if (isEnd)     circleClass = 'sc-end';
-    if (isCurrent) circleClass = 'sc-current';
-    if (isHub)     circleClass = 'sc-transfer';
+    if (isStart)            circleClass = 'sc-start';
+    if (isEnd)              circleClass = 'sc-end';
+    if (isCurrent)          circleClass = 'sc-current';
+    if (isHub)              circleClass = 'sc-transfer';
     if (isDone && !isStart) circleClass = 'sc-done';
 
     let nameClass = '';
@@ -606,11 +642,11 @@ function renderStopList(result) {
     if (isEnd)     nameClass = 'end';
 
     let timeEl = '';
-    if (isStart)   timeEl = `<span class="stop-time" style="color:var(--blue)">${etaStr} 출발</span>`;
-    else if (isEnd) timeEl = `<span class="stop-time end">${etaStr} 도착</span>`;
-    else if (isHub) timeEl = `<span class="stop-time transfer">${etaStr} 환승</span>`;
+    if (isStart)        timeEl = `<span class="stop-time" style="color:var(--blue)">${etaStr} 출발</span>`;
+    else if (isEnd)     timeEl = `<span class="stop-time end">${etaStr} 도착</span>`;
+    else if (isHub)     timeEl = `<span class="stop-time transfer">${etaStr} 환승</span>`;
     else if (isCurrent) timeEl = `<span class="stop-time current">${etaStr}<span class="here-tag">현위치</span></span>`;
-    else            timeEl = `<span class="stop-time" style="color:${isDone?'var(--text-3)':'var(--text-2)'}">${etaStr}</span>`;
+    else                timeEl = `<span class="stop-time" style="color:${isDone ? 'var(--text-3)' : 'var(--text-2)'}">${etaStr}</span>`;
 
     const rowClass = isCurrent ? 'stop-row current' : isHub ? 'stop-row transfer-row' : 'stop-row';
     const opacity  = isDone && !isStart ? 'opacity:.4;' : '';
@@ -620,7 +656,7 @@ function renderStopList(result) {
         <div class="stop-circle ${circleClass}"></div>
         ${hasLine ? '<div class="stop-vline"></div>' : ''}
       </div>
-      <span class="stop-name ${nameClass}">${stop.displayName||stop.name}</span>
+      <span class="stop-name ${nameClass}">${stop.displayName || stop.name}</span>
       ${timeEl}
     </div>`;
   });
