@@ -225,6 +225,23 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
       viaList = [...viaList, ...extra].slice(0, 3);
     }
     // ─────────────────────────────────────────────────────
+
+    // 기점에서 검색 정류장까지 소요시간 추정 후 각 회차 통과 시각을 rows에 추가
+    const busTimes = getRouteTimes(route, dayType);
+    const color    = getZoneColor(route);
+    const busNum   = getBusNum(route);
+    busTimes.forEach(depMin => {
+      const passMin = depMin + leg0;
+      rows.push({
+        passMin,
+        busNum,
+        color,
+        via:      viaList.join(' → '),
+        terminus,
+        isPast:   passMin < nMin,
+        route,
+      });
+    });
   });
 
   rows.sort((a, b) => a.passMin - b.passMin);
