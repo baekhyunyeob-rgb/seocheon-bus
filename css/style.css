@@ -451,25 +451,29 @@ input[type="time"].custom-time {
   border-top: 0.5px solid var(--border);
   border-bottom: 0.5px solid var(--border);
   padding: 6px 10px; gap: 4px;
-  grid-template-columns: 40px 38px 1fr 60px;
+  grid-template-columns: 44px 50px 1fr 64px;
   font-size: 10px; font-weight: 600; color: var(--text-3);
   position: sticky; top: 0; z-index: 5;
+  text-align: center;
 }
 .tt-row {
   display: grid;
-  grid-template-columns: 40px 38px 1fr 60px;
+  grid-template-columns: 44px 50px 1fr 64px;
   gap: 4px; padding: 7px 10px;
   border-bottom: 0.5px solid var(--border);
   align-items: center;
 }
 .tt-row.past { opacity: .35; }
 .tt-row.next-bus { background: var(--amber-l); }
-.tt-time { font-size: 12px; font-weight: 600; color: var(--text); }
+.tt-time { font-size: 12px; font-weight: 600; color: var(--text); text-align: center; }
 .tt-time.past { text-decoration: line-through; }
 .tt-time.next { color: var(--red); }
-.tt-route    { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tt-dest     { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-num-cell  { display: flex; justify-content: center; align-items: center; }
+.tt-route    { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.tt-dest     { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .tt-remark   { font-size: 10px; color: var(--purple); text-align: right; white-space: nowrap; }
+.tt-bus-pill-btn { cursor: pointer; transition: opacity .15s; -webkit-tap-highlight-color: transparent; user-select: none; }
+.tt-bus-pill-btn:active { opacity: .6; }
 
 /* ===== 버스노선도 화면 ===== */
 .zone-legend {

@@ -220,10 +220,12 @@ function initRoutesMap() {
   });
 }
 
-function showRouteOnMap(route) {
+function showRouteOnMap(route, searchStop) {
   if (!STATE.mapRoutes) return;
   STATE.routeMarkers.forEach(m=>m.setMap(null)); STATE.routeMarkers=[];
   if (STATE.routePolyline) { STATE.routePolyline.setMap(null); STATE.routePolyline=null; }
+  // 이전 검색 정류장 마커 제거
+  if (STATE.searchStopMarker) { STATE.searchStopMarker.setMap(null); STATE.searchStopMarker=null; }
 
   const color  = getZoneColor(route);
   const coords = getRouteCoords(route).filter(c=>c.lat);
@@ -244,8 +246,7 @@ function showRouteOnMap(route) {
     const a=coords[idx-1], b=coords[idx+1];
     if (!a||!b) return;
     const angle = Math.atan2(b.lat-a.lat, b.lng-a.lng);
-    const size  = 0.0003; // 위경도 단위
-    // 직각삼각형 꼭짓점
+    const size  = 0.0003;
     const tip  = { lat: coords[idx].lat + Math.sin(angle)*size, lng: coords[idx].lng + Math.cos(angle)*size };
     const bl   = { lat: coords[idx].lat - Math.sin(angle+Math.PI/2)*size*0.6, lng: coords[idx].lng - Math.cos(angle+Math.PI/2)*size*0.6 };
     const br   = { lat: coords[idx].lat + Math.sin(angle+Math.PI/2)*size*0.6, lng: coords[idx].lng + Math.cos(angle+Math.PI/2)*size*0.6 };
@@ -258,7 +259,7 @@ function showRouteOnMap(route) {
     STATE.routeMarkers.push(tri);
   });
 
-  // 중간 정류장 점 (stops.json 출처: 노선색, 카카오 스냅 출처: 적색)
+  // 중간 정류장 점
   coords.forEach((c,i) => {
     if (i===0||i===coords.length-1) return;
     const isSnapped = c.source === 'snapped';
@@ -284,6 +285,22 @@ function showRouteOnMap(route) {
   const endPin = makeLocationPin(coords[coords.length-1].lat, coords[coords.length-1].lng, '#E24B4A');
   endPin.setMap(STATE.mapRoutes);
   STATE.routeMarkers.push(endPin);
+
+  // ── 검색 정류장 마커 (시간표에서 진입했을 때) ──────────────────
+  if (searchStop?.lat && searchStop?.lng) {
+    const disp = searchStop.displayName || searchStop.name;
+    STATE.searchStopMarker = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(searchStop.lat, searchStop.lng),
+      content: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none">
+        <div style="background:#EF9F27;color:#fff;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25)">${disp}</div>
+        <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #EF9F27;margin-top:-1px"></div>
+        <div style="width:10px;height:10px;background:#EF9F27;border:2.5px solid #fff;border-radius:50%;margin-top:-1px;box-shadow:0 1px 4px rgba(0,0,0,.2)"></div>
+      </div>`,
+      yAnchor: 1.15, zIndex: 10,
+    });
+    STATE.searchStopMarker.setMap(STATE.mapRoutes);
+  }
+  // ──────────────────────────────────────────────────────────────
 
   // 지도 범위 조정
   const bounds = new kakao.maps.LatLngBounds();

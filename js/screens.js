@@ -156,80 +156,176 @@ function selectStopForTimetable(name, disp, lat, lng) {
   renderStopTimetable(name, disp, lat, lng);
 }
 
+// 허브 정류장 목록 (환승 허브 + 이용 빈도 높은 곳)
+const TT_HUB_STOPS = new Set([
+  '서천터미널','한산공용터미널','장항터미널',
+  '서천역','장항역','판교역',
+  '판교','기산','문산','화양','비인','마서','종천','장항읍내',
+  '서천시외버스터미널','장항시외버스터미널',
+]);
+
 function renderStopTimetable(stopName, displayName, lat, lng) {
   const dayType = getDayType();
   const nMin    = nowMin();
-  const HUBS = ['서천터미널','한산공용터미널','장항터미널','서천역','판교','기산','문산','화양','비인','마서','종천','장항읍내'];
 
   const rows = [];
   ROUTES.forEach(route => {
     const coords = getRouteCoords(route);
     if (!coords.length) return;
 
-    // 이름 기반 인덱스 — 이름 매칭 안 되면 300m 좌표 fallback
+    // 검색 정류장 인덱스
     let idx = findIdxByName(coords, stopName);
     if (idx === -1) idx = findIdxByCoord(coords, lat, lng, 300);
     if (idx === -1) return;
 
     const ck    = getCountKey(dayType);
-    const count = route[ck]||0;
-    if (!count||!route['첫차']||!route['막차']) return;
+    const count = route[ck] || 0;
+    if (!count || !route['첫차'] || !route['막차']) return;
 
-    // 기점에서 이 정류장까지 소요시간 추정
+    // 기점→검색 정류장 소요시간 추정
     const fc = coords[0], sc = coords[idx];
     const leg0 = (fc?.lat && sc?.lat)
       ? Math.round(distM(fc.lat, fc.lng, sc.lat, sc.lng) / 1000 * 2.5)
-      : Math.round((route['거리']||10) * 2.5 * idx / Math.max(coords.length-1,1));
+      : Math.round((route['거리'] || 10) * 2.5 * idx / Math.max(coords.length - 1, 1));
 
-    // 이 정류장 이후 주요 경유지 (coords 기반)
-    const afterHubs = [];
-    for (let i = idx+1; i < coords.length && afterHubs.length < 3; i++) {
-      const h = HUBS.find(h => coords[i].name?.includes(h.substring(0,3)));
-      if (h && !afterHubs.includes(h)) afterHubs.push(h);
+    // ── 주요경유 3조건 ────────────────────────────────────
+    // 조건 1: 검색 정류장(idx) 이후 구간만
+    // 조건 2: 종점 제외, 중복 이름 제거
+    // 조건 3: 허브 우선 2개 이상 확보, 부족하면 비허브로 채워 최대 3개
+    const terminus = route['종점'];
+    const seenNames = new Set([terminus]);
+    const hubList = [], nonHubList = [];
+    for (let i = idx + 1; i < coords.length - 1; i++) {
+      const name = coords[i].name;
+      if (!name || seenNames.has(name)) continue;
+      seenNames.add(name);
+      (TT_HUB_STOPS.has(name) ? hubList : nonHubList).push(name);
     }
+    const viaList = (hubList.length >= 2 ? hubList : [...hubList, ...nonHubList]).slice(0, 3);
+    // ─────────────────────────────────────────────────────
 
     const color  = getZoneColor(route);
     const busNum = getBusNum(route);
     const fMin   = timeToMin(route['첫차']), lMin = timeToMin(route['막차']);
-    const interval = count > 1 ? Math.round((lMin-fMin)/(count-1)) : 0;
+    const interval = count > 1 ? Math.round((lMin - fMin) / (count - 1)) : 0;
 
     for (let i = 0; i < count; i++) {
-      const depMin  = fMin + interval * i;
-      const passMin = depMin + leg0;
-      rows.push({ passMin, isPast: passMin < nMin, color, busNum, via: afterHubs.join('→'), terminus: route['종점'], remark: '' });
+      const passMin = fMin + interval * i + leg0;
+      rows.push({
+        passMin,
+        isPast: passMin < nMin,
+        color, busNum, route,
+        via: viaList.join(' → '),
+        terminus,
+      });
     }
   });
 
-  rows.sort((a,b)=>a.passMin-b.passMin);
+  rows.sort((a, b) => a.passMin - b.passMin);
   if (!rows.length) {
-    document.getElementById('timetable-body').innerHTML=`<div style="text-align:center;padding:40px;color:var(--text-3);font-size:13px">이 정류장을 지나는 버스가 없습니다</div>`;
+    document.getElementById('timetable-body').innerHTML =
+      `<div style="text-align:center;padding:40px;color:var(--text-3);font-size:13px">이 정류장을 지나는 버스가 없습니다</div>`;
     return;
   }
 
-  const routeCount = new Set(rows.map(r=>r.busNum)).size;
-  const nextIdx    = rows.findIndex(r=>!r.isPast);
+  const routeCount = new Set(rows.map(r => r.busNum)).size;
+  const nextIdx    = rows.findIndex(r => !r.isPast);
 
-  let html=`<div class="tt-stop-info">
-    <div>
-      <span class="tt-stop-name">📍 ${displayName}</span>
-    </div>
+  let html = `<div class="tt-stop-info">
+    <div><span class="tt-stop-name">📍 ${displayName}</span></div>
     <span class="tt-stop-meta">${routeCount}개 노선 · ${rows.length}대</span>
   </div>
   <div class="tt-grid-header">
     <div>시간</div><div>번호</div><div>주요경유</div><div>종점</div>
   </div>`;
 
-  rows.forEach((r,i) => {
-    const isNext = i===nextIdx;
-    html+=`<div class="tt-row${r.isPast?' past':isNext?' next-bus':''}">
-      <div class="tt-time${r.isPast?' past':isNext?' next':''}">${minToTime(r.passMin)}</div>
-      <div><span class="bus-pill" style="background:${r.color};font-size:10px;padding:1px 5px">${r.busNum}</span></div>
-      <div class="tt-route">${r.via}</div>
+  rows.forEach((r, i) => {
+    const isNext = i === nextIdx;
+    // 노선 객체를 안전하게 직렬화 (onclick 속성용)
+    const rJson = JSON.stringify(r.route).replace(/"/g, '&quot;');
+    const sName = stopName.replace(/'/g, "\\'");
+    const sDisp = displayName.replace(/'/g, "\\'");
+    html += `<div class="tt-row${r.isPast ? ' past' : isNext ? ' next-bus' : ''}">
+      <div class="tt-time${r.isPast ? ' past' : isNext ? ' next' : ''}">${minToTime(r.passMin)}</div>
+      <div class="tt-num-cell">
+        <span class="bus-pill tt-bus-pill-btn"
+          style="background:${r.color};font-size:10px;padding:1px 5px"
+          onclick="openRouteFromTimetable(${rJson},'${sName}','${sDisp}',${lat},${lng})"
+        >${r.busNum}</span>
+      </div>
+      <div class="tt-route">${r.via || '—'}</div>
       <div class="tt-dest">${r.terminus}</div>
     </div>`;
   });
 
-  document.getElementById('timetable-body').innerHTML=html;
+  document.getElementById('timetable-body').innerHTML = html;
+}
+
+// ── 시간표 노선번호 탭 → 버스노선도 화면 전환 ────────────────────────
+// stopName/displayName/lat/lng: 시간표에서 검색했던 정류장 정보
+function openRouteFromTimetable(route, stopName, displayName, lat, lng) {
+  if (typeof route === 'string') route = JSON.parse(route);
+
+  // 돌아올 화면을 timetable로 기억
+  STATE.routesBackScreen = 'timetable';
+  STATE._fromTimetable = true;
+
+  // 권역 필터 활성화
+  const zoneId = getZoneId(route);
+  STATE.selectedZone = zoneId;
+
+  // 노선도 화면으로 전환 (탭바 갱신 포함)
+  showScreen('routes');
+
+  // 헤더 뒤로가기 버튼 표시 (시간표에서 진입했을 때만)
+  updateRoutesBackBtn();
+
+  // 권역 배지 UI 갱신
+  document.querySelectorAll('.zone-badge').forEach(p => p.classList.remove('active'));
+  document.getElementById('zone-pill-' + zoneId)?.classList.add('active');
+  renderRouteList(zoneId);
+
+  // 목록에서 해당 노선 강조 + 지도 표시
+  // (지도가 아직 초기화 안 됐을 수 있으므로 tryShow로 대기)
+  STATE.selectedRoute = route;
+  document.querySelectorAll('.route-list-item').forEach(el => el.classList.remove('active'));
+  document.getElementById(`rli-${route['번호']}-${route['기점'].replace(/\s/g, '')}`)?.classList.add('active');
+
+  // 검색 정류장 정보 저장 (showRouteOnMap에서 사용)
+  STATE.timetableSearchStop = { name: stopName, displayName, lat, lng };
+
+  const tryShow = () => {
+    if (STATE.mapRoutes) {
+      showRouteOnMap(route, STATE.timetableSearchStop);
+    } else {
+      setTimeout(tryShow, 200);
+    }
+  };
+  tryShow();
+}
+
+// 노선도 화면 헤더의 뒤로가기 버튼 갱신
+function updateRoutesBackBtn() {
+  const btn = document.getElementById('routes-back-btn');
+  if (!btn) return;
+  if (STATE.routesBackScreen) {
+    btn.style.display = 'flex';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+// 노선도에서 뒤로가기
+function goBackFromRoutes() {
+  const target = STATE.routesBackScreen || 'home';
+  STATE.routesBackScreen = null;
+  STATE.timetableSearchStop = null;
+  // 검색 정류장 마커 제거
+  if (STATE.searchStopMarker) {
+    STATE.searchStopMarker.setMap(null);
+    STATE.searchStopMarker = null;
+  }
+  showScreen(target);
 }
 
 // ==================== 버스노선도 화면 ====================
@@ -272,7 +368,7 @@ function renderRouteList(zoneId) {
 
   if (zoneId) {
     const zone = ZONES.find(z=>z.id===zoneId);
-    if (zone) filtered = filtered.filter(r => zone.test(r));
+    if (zone) filtered = filtered.filter(r => getZoneId(r) === zoneId);
   }
 
   el.innerHTML = filtered.map(r => {
@@ -298,9 +394,16 @@ function selectRoute(route) {
   document.querySelectorAll('.route-list-item').forEach(el=>el.classList.remove('active'));
   document.getElementById(`rli-${route['번호']}-${route['기점'].replace(/\s/g,'')}`)?.classList.add('active');
 
+  // 노선 목록에서 직접 선택하면 검색 정류장 마커 제거
+  if (STATE.searchStopMarker) {
+    STATE.searchStopMarker.setMap(null);
+    STATE.searchStopMarker = null;
+  }
+  STATE.timetableSearchStop = null;
+
   // 지도에 노선 표시
   const tryShow = () => {
-    if (STATE.mapRoutes) showRouteOnMap(route);
+    if (STATE.mapRoutes) showRouteOnMap(route, null);
     else setTimeout(tryShow, 200);
   };
   tryShow();

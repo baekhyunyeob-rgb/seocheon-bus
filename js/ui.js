@@ -72,6 +72,18 @@ function showScreen(name, pushHistory = true) {
   STATE.currentScreen = name;
 
   if (name==='routes' && !STATE.mapRoutes) setTimeout(initRoutesMap, 100);
+  if (name==='routes') {
+    // 탭바 직접 탭이면 뒤로가기 버튼 숨김 (openRouteFromTimetable 경유가 아닐 때)
+    // openRouteFromTimetable에서 이미 STATE.routesBackScreen을 설정하므로
+    // 그 외 경로(탭바 탭)에서는 초기화
+    if (!STATE._fromTimetable) {
+      STATE.routesBackScreen = null;
+      if (STATE.searchStopMarker) { STATE.searchStopMarker.setMap(null); STATE.searchStopMarker = null; }
+      STATE.timetableSearchStop = null;
+    }
+    STATE._fromTimetable = false;
+    setTimeout(updateRoutesBackBtn, 0);
+  }
   if (name==='transport') initTransportScreen();
   if (name==='favorites') renderFavorites();
 
