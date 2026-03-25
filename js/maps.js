@@ -217,6 +217,10 @@ function initRoutesMap() {
     STATE.mapRoutes = new kakao.maps.Map(el, {
       center: new kakao.maps.LatLng(36.0758,126.6908), level:10,
     });
+    // 지도 준비 완료 → tryShow 루프가 돌고 있으면 즉시 표시
+    if (STATE.selectedRoute) {
+      showRouteOnMap(STATE.selectedRoute, STATE.timetableSearchStop || null);
+    }
   });
 }
 

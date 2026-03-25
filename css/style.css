@@ -462,13 +462,14 @@ input[type="time"].custom-time {
   gap: 4px; padding: 7px 10px;
   border-bottom: 0.5px solid var(--border);
   align-items: center;
+  text-align: left;
 }
 .tt-row.past { opacity: .35; }
 .tt-row.next-bus { background: var(--amber-l); }
-.tt-time { font-size: 12px; font-weight: 600; color: var(--text); text-align: center; }
+.tt-time { font-size: 12px; font-weight: 600; color: var(--text); text-align: left; }
 .tt-time.past { text-decoration: line-through; }
 .tt-time.next { color: var(--red); }
-.tt-num-cell  { display: flex; justify-content: center; align-items: center; }
+.tt-num-cell  { display: flex; justify-content: flex-start; align-items: center; }
 .tt-route    { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .tt-dest     { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .tt-remark   { font-size: 10px; color: var(--purple); text-align: right; white-space: nowrap; }
