@@ -70,7 +70,12 @@ function searchPlaceKakao(keyword, container) {
     }
     const pLat=parseFloat(data[0].y), pLng=parseFloat(data[0].x);
     const nearest = STOPS.map(s=>({...s,d:distM(s.lat,s.lng,pLat,pLng)})).sort((a,b)=>a.d-b.d).slice(0,5);
-    container.innerHTML = `<div class="modal-section-label">"${data[0].place_name}" 인근 정류장</div>`;
+    // place_name은 외부 API 값이므로 innerHTML 직접 삽입 금지 → textContent 사용
+    const label = document.createElement('div');
+    label.className = 'modal-section-label';
+    label.textContent = `"${data[0].place_name}" 인근 정류장`;
+    container.innerHTML = '';
+    container.appendChild(label);
     renderStopResults(nearest, container, true);
   });
 }

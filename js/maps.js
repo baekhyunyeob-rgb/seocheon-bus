@@ -3,11 +3,31 @@
 // ==================== 카카오맵 로드 ====================
 function loadKakaoMap() {
   if (typeof kakao === 'undefined' || typeof kakao.maps === 'undefined') {
+    // 최초 호출 시 타이머 시작
+    if (!loadKakaoMap._retryCount) loadKakaoMap._retryCount = 0;
+    loadKakaoMap._retryCount++;
+    if (loadKakaoMap._retryCount > 10) {
+      // 5초(500ms × 10) 이상 로드 안 되면 사용자에게 안내
+      const ex = document.getElementById('map-error-banner');
+      if (!ex) {
+        const banner = document.createElement('div');
+        banner.id = 'map-error-banner';
+        banner.style.cssText = [
+          'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:9999',
+          'background:#FCEBEB', 'color:#A32D2D',
+          'font-size:13px', 'text-align:center',
+          'padding:10px 16px', 'line-height:1.5',
+        ].join(';');
+        banner.textContent = '⚠️ 지도를 불러오지 못했습니다. 네트워크를 확인하거나 새로고침해 주세요.';
+        document.body.prepend(banner);
+      }
+      return;
+    }
     setTimeout(loadKakaoMap, 500); return;
   }
   kakao.maps.load(async () => {
     initHomeMap();
-    await buildRouteCoords(); // 노선 좌표 구축
+    await buildRouteCoords();
   });
 }
 

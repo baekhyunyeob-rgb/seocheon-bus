@@ -95,7 +95,10 @@ function showScreen(name, pushHistory = true) {
 
 // ==================== GPS 위치 ====================
 function initLocation() {
-  if (!navigator.geolocation) return;
+  if (!navigator.geolocation) {
+    showGpsUnavailable('이 브라우저는 위치 기능을 지원하지 않습니다');
+    return;
+  }
   navigator.geolocation.getCurrentPosition(pos => {
     STATE.myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     STATE.gpsReady = true;
@@ -105,7 +108,36 @@ function initLocation() {
       updateMyMarker(STATE.mapHome, ll);
     }
     if (!isInSeocheon(STATE.myLocation.lat, STATE.myLocation.lng)) showOutOfArea();
-  }, () => {});
+  }, err => {
+    // 1: PERMISSION_DENIED, 2: POSITION_UNAVAILABLE, 3: TIMEOUT
+    const msg = err.code === 1
+      ? 'GPS 권한이 거부되어 현위치를 사용할 수 없습니다\n(출발지를 직접 입력하면 경로 검색은 가능합니다)'
+      : 'GPS 위치를 가져오지 못했습니다\n(출발지를 직접 입력해 주세요)';
+    showGpsUnavailable(msg);
+  });
+}
+
+function showGpsUnavailable(msg) {
+  const ex = document.getElementById('gps-unavailable-banner');
+  if (ex) return;
+  const el = document.createElement('div');
+  el.id = 'gps-unavailable-banner';
+  el.style.cssText = [
+    'position:fixed', 'bottom:72px', 'left:12px', 'right:12px', 'z-index:9000',
+    'background:#fff3cd', 'color:#664d03',
+    'font-size:12px', 'line-height:1.5',
+    'padding:10px 14px', 'border-radius:10px',
+    'box-shadow:0 2px 10px rgba(0,0,0,.12)',
+    'white-space:pre-line',
+  ].join(';');
+  el.textContent = '📍 ' + msg;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'float:right;background:none;border:none;font-size:13px;cursor:pointer;color:#664d03;margin-left:8px;padding:0';
+  closeBtn.onclick = () => el.remove();
+  el.prepend(closeBtn);
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 8000);
 }
 
 function showOutOfArea() {
