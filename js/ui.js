@@ -389,7 +389,7 @@ function renderReturnCard(r, dayType) {
         <div class="rc-row">
           <span class="rc-time blue">${minToTime(r.nextMin)}</span>
           <div class="rc-dot blue"></div>
-          <span class="rc-label">${r.route['기점']} 탑승</span>
+          <span class="rc-label">${r.boardStop || r.route['기점']} 탑승</span>
         </div>
         <div class="rc-vline-wrap"><div class="rc-vline"></div></div>
         <div class="rc-row">
@@ -401,7 +401,7 @@ function renderReturnCard(r, dayType) {
         <div class="rc-row">
           <span class="rc-time red">${minToTime(arrMin)}</span>
           <div class="rc-dot red"></div>
-          <span class="rc-label">${r.route2['종점']} 도착</span>
+          <span class="rc-label">${r.alightStop || r.route2['종점']} 도착</span>
         </div>
       </div>
       ${nextChips ? `<div class="rc-next"><span class="rc-next-label">이후 버스</span>${nextChips}</div>` : ''}
@@ -424,13 +424,13 @@ function renderReturnCard(r, dayType) {
       <div class="rc-row">
         <span class="rc-time blue">${minToTime(r.nextMin)}</span>
         <div class="rc-dot blue"></div>
-        <span class="rc-label">${r.route['기점']} 탑승</span>
+        <span class="rc-label">${r.boardStop || r.route['기점']} 탑승</span>
       </div>
       <div class="rc-vline-wrap"><div class="rc-vline"></div></div>
       <div class="rc-row">
         <span class="rc-time red">${minToTime(arrMin)}</span>
         <div class="rc-dot red"></div>
-        <span class="rc-label">${r.route['종점']} 도착</span>
+        <span class="rc-label">${r.alightStop || r.route['종점']} 도착</span>
       </div>
     </div>
     ${nextChips ? `<div class="rc-next"><span class="rc-next-label">이후 버스</span>${nextChips}</div>` : ''}
