@@ -1,34 +1,11 @@
 'use strict';
 
-// ==================== API 키 설정 ====================
-// ⚠️  보안 주의: 이 파일에 API 키를 직접 적지 마세요.
-//
-// [운영 방법]
-//  1. 프로젝트 루트에 config.js 파일을 만들고 아래처럼 설정:
-//     window.APP_CONFIG = {
-//       kakaoJsKey:   '발급받은_JS_키',
-//       kakaoRestKey: '발급받은_REST_키',
-//     };
-//  2. config.js 는 .gitignore 에 추가해서 저장소에 올리지 않기.
-//  3. config.js 가 없으면 디버그 화면에서 키를 직접 입력 가능.
-//
-// [디버그/로컬 테스트 시 대체 수단 - 우선순위 순]
-//   ① window.APP_CONFIG (config.js)
-//   ② localStorage 'sc_kakao_js_key' / 'sc_kakao_rest_key'
-//   ③ 빈 문자열 (지도 미작동, 콘솔 경고 출력)
+// ==================== 상수 ====================
+// 카카오맵 JS 키 (지도 표시용 — index.html의 SDK 로드에도 동일하게 사용)
+const KAKAO_JS_KEY = 'ea4bdbbdf5c627aba4db0a4b163c9b0d';
 
-function _getConfig() {
-  const cfg = window.APP_CONFIG || {};
-  return {
-    jsKey:   cfg.kakaoJsKey   || localStorage.getItem('sc_kakao_js_key')   || '',
-    restKey: cfg.kakaoRestKey || localStorage.getItem('sc_kakao_rest_key') || '',
-  };
-}
-
-// 하위 호환: 기존 코드가 KAKAO_REST_KEY 상수를 직접 참조하는 곳을 위한 getter
-// (routeCoords.js 등에서 KAKAO_REST_KEY 대신 getKakaoRestKey() 사용 권장)
-function getKakaoJsKey()   { return _getConfig().jsKey; }
-function getKakaoRestKey() { return _getConfig().restKey; }
+// 카카오 REST API 키 (Directions API 호출용)
+const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
 
 const SEOCHEON_BOUNDS = { minLat:35.97, maxLat:36.22, minLng:126.49, maxLng:126.89 };
 

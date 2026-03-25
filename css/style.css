@@ -444,30 +444,24 @@ input[type="time"].custom-time {
 .tt-stop-name { font-size: 13px; font-weight: 600; }
 .tt-stop-meta { font-size: 11px; color: var(--text-3); }
 
-/* 시간표 그리드 — 3컬럼: 시간(15%) 번호(20%) 주요경유(65%) */
+/* 시간표 그리드 */
 .tt-grid-header {
   display: grid;
   background: #f8f8f8;
   border-top: 0.5px solid var(--border);
   border-bottom: 0.5px solid var(--border);
   padding: 6px 10px; gap: 4px;
-  grid-template-columns: 44px 58px 1fr;
+  grid-template-columns: 40px 38px 1fr 60px;
   font-size: 10px; font-weight: 600; color: var(--text-3);
-  text-align: center;
   position: sticky; top: 0; z-index: 5;
 }
-.tt-grid-header > div { text-align: center; }
 .tt-row {
   display: grid;
-  grid-template-columns: 44px 58px 1fr;
+  grid-template-columns: 40px 38px 1fr 60px;
   gap: 4px; padding: 7px 10px;
   border-bottom: 0.5px solid var(--border);
   align-items: center;
 }
-/* 컬럼별 정렬 */
-.tt-col-time { text-align: center; }
-.tt-col-num  { text-align: center; display: flex; justify-content: center; }
-.tt-col-via  { text-align: left; }
 .tt-row.past { opacity: .35; }
 .tt-row.next-bus { background: var(--amber-l); }
 .tt-time { font-size: 12px; font-weight: 600; color: var(--text); }

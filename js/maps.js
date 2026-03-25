@@ -258,29 +258,18 @@ function showRouteOnMap(route) {
     STATE.routeMarkers.push(tri);
   });
 
-  // 중간 정류장 점 (stops_data: 노선색 원형, snapped: 적색 사각형+이름라벨)
+  // 중간 정류장 점 (stops.json 출처: 노선색, 카카오 스냅 출처: 적색)
   coords.forEach((c,i) => {
     if (i===0||i===coords.length-1) return;
     const isSnapped = c.source === 'snapped';
-
-    let content;
-    if (isSnapped) {
-      // 앵커 스냅 정류장: 빨간 사각 마커 + 이름 라벨 (검증용)
-      content = `<div title="${c.name} (앵커스냅)" style="display:flex;flex-direction:column;align-items:center;cursor:default">
-        <div style="background:#E24B4A;color:#fff;border:1.5px solid #fff;border-radius:3px;padding:1px 4px;font-size:9px;font-weight:700;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);line-height:1.4">${c.name}</div>
-        <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid #E24B4A;margin-top:-1px"></div>
-        <div style="width:7px;height:7px;background:#E24B4A;border:2px solid #fff;border-radius:2px"></div>
-      </div>`;
-    } else {
-      // stops.json 기반 정류장: 작은 원형 점
-      content = `<div title="${c.name}" style="width:5px;height:5px;background:${color};border:1.5px solid #fff;border-radius:50%;cursor:default"></div>`;
-    }
-
+    const dotColor  = isSnapped ? '#E24B4A' : color;
+    const dotSize   = isSnapped ? '7px' : '5px';
+    const border    = isSnapped ? '2px solid #fff' : '1.5px solid #fff';
+    const title     = isSnapped ? `title="${c.name} (도로스냅)"` : `title="${c.name}"`;
     const dot = new kakao.maps.CustomOverlay({
       position: new kakao.maps.LatLng(c.lat,c.lng),
-      content,
-      yAnchor: isSnapped ? 1.5 : 0.5,
-      zIndex: isSnapped ? 4 : 2,
+      content: `<div ${title} style="width:${dotSize};height:${dotSize};background:${dotColor};border:${border};border-radius:50%;cursor:default"></div>`,
+      yAnchor:0.5, zIndex:2,
     });
     dot.setMap(STATE.mapRoutes);
     STATE.routeMarkers.push(dot);

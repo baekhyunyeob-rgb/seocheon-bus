@@ -59,8 +59,10 @@ async function fetchRoadPolyline(anchors) {
     if (wps) url += `&waypoints=${wps}`;
 
     try {
-      // REST 키: localStorage 우선 → APP_CONFIG → 에러
-      const restKey = getKakaoRestKey();
+      // REST 키: localStorage 우선 → 전역 변수 → data.js 상수 순
+      const restKey = localStorage.getItem('sc_kakao_rest_key')
+                   || window._kakaoRestKey
+                   || KAKAO_REST_KEY;
       const res  = await fetch(url, { headers: { Authorization: `KakaoAK ${restKey}` } });
       const data = await res.json();
       const pts  = [];

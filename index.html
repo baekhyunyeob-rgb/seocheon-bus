@@ -328,22 +328,12 @@
 
 </div><!-- /#app -->
 
-<!-- 카카오맵 SDK — JS 모듈보다 먼저 로드해야 kakao 객체가 준비됨 (autoload=false) -->
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&autoload=false&libraries=services,clusterer"></script>
-
 <!-- JS 모듈 -->
-<script src="config.js" onerror="console.warn('config.js 없음 — 원본 키로 동작합니다')"></script>
 <script src="js/data.js"></script>
 <script src="js/routeCoords.js"></script>
 <script src="js/search.js"></script>
 <script src="js/maps.js"></script>
 <script src="js/ui.js"></script>
-<!-- 분리된 화면 모듈 -->
-<script src="js/modal.js"></script>
-<script src="js/timetable.js"></script>
-<script src="js/routes-screen.js"></script>
-<script src="js/transport.js"></script>
-<script src="js/favorites.js"></script>
 <script src="js/screens.js"></script>
 
 <!-- 앱 초기화 -->
@@ -370,23 +360,21 @@ function swapFromTo() {
 }
 
 function goToMyLocation() {
-  if (!STATE.mapHome) return;
-  const ll = new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng);
-  STATE.mapHome.panTo(ll);
-  updateMyMarker(STATE.mapHome, ll);
+  if (STATE.mapHome) {
+    STATE.mapHome.panTo(new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng));
+  }
 }
 </script>
 
-<!-- REST 키 초기화 (config.js → localStorage 순으로 fallback) -->
+<!-- 카카오맵 SDK -->
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&autoload=false&libraries=services,clusterer"></script>
+
+<!-- 앱 시작 시 저장된 REST 키 불러오기 -->
 <script>
-(function() {
-  const cfg = window.APP_CONFIG || {};
-  const restKey = cfg.kakaoRestKey || localStorage.getItem('sc_kakao_rest_key') || '';
-  if (restKey) {
-    window._kakaoRestKey = restKey;
-    localStorage.setItem('sc_kakao_rest_key', restKey);
-  }
-})();
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('sc_kakao_rest_key');
+  if (saved) window._kakaoRestKey = saved;
+});
 </script>
 
 </body>
