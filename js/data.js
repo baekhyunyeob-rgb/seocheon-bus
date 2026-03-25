@@ -2,10 +2,10 @@
 
 // ==================== 상수 ====================
 // 카카오맵 JS 키 (지도 표시용 — index.html의 SDK 로드에도 동일하게 사용)
-const KAKAO_JS_KEY = 'ea4bdbbdf5c627aba4db0a4b163c9b0d';
-
-// 카카오 REST API 키 (Directions API 호출용)
-const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
+// ⚠️ 키는 소스에 직접 넣지 않습니다.
+// 앱 설정 화면(⚙) 또는 localStorage 'sc_kakao_js_key' / 'sc_kakao_rest_key' 에 저장하세요.
+const KAKAO_JS_KEY  = '';
+const KAKAO_REST_KEY = '';
 
 const SEOCHEON_BOUNDS = { minLat:35.97, maxLat:36.22, minLng:126.49, maxLng:126.89 };
 
@@ -93,8 +93,11 @@ async function loadData() {
       fetch('data/stops.json'),
       fetch('data/route_anchors.json'),
     ]);
+
+    if (!rRes.ok || !sRes.ok || !aRes.ok) throw new Error('데이터 파일 응답 오류');
+
     const rawRoutes = await rRes.json();
-    ROUTES = rawRoutes; // 전체 133개 사용
+    ROUTES = rawRoutes;
 
     const rawStops = await sRes.json();
     STOPS = buildDisplayNames(rawStops);
@@ -102,6 +105,20 @@ async function loadData() {
     STATE.routeAnchors = await aRes.json();
   } catch(e) {
     console.warn('데이터 로드 실패', e);
+    // 사용자에게 오류 안내 표시
+    const app = document.getElementById('app');
+    if (app) {
+      const banner = document.createElement('div');
+      banner.id = 'data-error-banner';
+      banner.style.cssText = [
+        'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:9999',
+        'background:#FCEBEB', 'color:#A32D2D',
+        'font-size:13px', 'text-align:center',
+        'padding:10px 16px', 'line-height:1.5',
+      ].join(';');
+      banner.innerHTML = '⚠️ 데이터를 불러오지 못했습니다. 네트워크 연결을 확인하거나 새로고침해 주세요.';
+      document.body.prepend(banner);
+    }
   }
 }
 

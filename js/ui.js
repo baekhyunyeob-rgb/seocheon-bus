@@ -1,14 +1,73 @@
 'use strict';
 
+// ==================== 탭바 ====================
+const TABS = [
+  {
+    id: 'home',
+    label: '홈',
+    onclick: "showScreen('home')",
+    icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>`,
+    activeColor: '#1D9E75',
+  },
+  {
+    id: 'timetable',
+    label: '버스시간표',
+    onclick: "showScreen('timetable')",
+    icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+    activeColor: '#EF9F27',
+  },
+  {
+    id: 'routes',
+    label: '버스노선도',
+    onclick: "showScreen('routes')",
+    icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/><path d="M2 10h18" stroke="currentColor" stroke-width="1.3"/></svg>`,
+    activeColor: '#185FA5',
+  },
+  {
+    id: 'transport',
+    label: '시외버스·기차',
+    onclick: "showScreen('transport')",
+    icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="currentColor"/><circle cx="16" cy="16.5" r="2" fill="currentColor"/><path d="M2 19h18" stroke="currentColor" stroke-width="1.3"/></svg>`,
+    activeColor: '#7F77DD',
+  },
+  {
+    id: 'favorites',
+    label: '즐겨찾기',
+    onclick: "showScreen('favorites')",
+    icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
+    activeColor: '#EF9F27',
+    activeIcon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>`,
+  },
+];
+
+function renderAllTabbars() {
+  document.querySelectorAll('nav.tabbar[id^="tabbar-"]').forEach(nav => {
+    const screenName = nav.id.replace('tabbar-', '');
+    nav.innerHTML = TABS.map(tab => {
+      const isActive = tab.id === screenName ||
+        (screenName === 'result' && tab.id === 'home') ||
+        (screenName === 'detail' && tab.id === 'home');
+      const color = isActive ? tab.activeColor : 'currentColor';
+      const icon  = (isActive && tab.activeIcon) ? tab.activeIcon
+        : tab.icon.replace(/stroke="currentColor"/g, `stroke="${color}"`).replace(/fill="currentColor"/g, `fill="${color}"`);
+      const tabId = (tab.id === 'home') ? `id="tab-${screenName}"` : `id="tab-${tab.id}"`;
+      return `<div class="tab${isActive ? ' active' : ''}" ${tabId} onclick="${tab.onclick}" style="color:${color}">
+        ${icon}
+        <span>${tab.label}</span>
+      </div>`;
+    }).join('');
+  });
+}
+
 // ==================== 화면 전환 ====================
 function showScreen(name, pushHistory = true) {
   document.querySelectorAll('.screen').forEach(s => { s.classList.remove('active'); s.style.display='none'; });
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
 
   const el = document.getElementById('screen-'+name);
   if (el) { el.style.display='flex'; el.classList.add('active'); }
-  const tab = document.getElementById('tab-'+name);
-  if (tab) tab.classList.add('active');
+
+  // 탭바 전체를 현재 화면 기준으로 다시 렌더링
+  renderAllTabbars();
 
   STATE.currentScreen = name;
 
@@ -45,6 +104,23 @@ function showOutOfArea() {
   el.className = 'out-of-area';
   el.textContent = '📍 현재 서천 서비스 지역 밖입니다';
   document.getElementById('screen-home')?.appendChild(el);
+}
+
+// 경로 상세 화면 현위치 버튼 — GPS 재요청 + 마커 갱신
+function goToMyLocationDetail() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(pos => {
+    STATE.myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    if (STATE.mapDetail) {
+      const ll = new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng);
+      STATE.mapDetail.panTo(ll);
+      updateMyMarker(STATE.mapDetail, ll);
+    }
+  }, () => {
+    if (STATE.mapDetail && STATE.myLocation) {
+      STATE.mapDetail.panTo(new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng));
+    }
+  });
 }
 
 // ==================== 홈 화면 ====================

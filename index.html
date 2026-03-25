@@ -27,6 +27,10 @@
       </button>
     </div>
     <div class="home-sheet">
+      <!-- 설정 버튼 -->
+      <button onclick="openSettingsModal()" style="position:absolute;top:8px;right:12px;background:none;border:none;padding:4px;cursor:pointer;z-index:5;color:var(--text-2)" title="앱 설정">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.1 3.1l1.4 1.4M13.5 13.5l1.4 1.4M3.1 14.9l1.4-1.4M13.5 4.5l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </button>
       <!-- 입력 트랙 -->
       <div class="loc-track-wrap">
         <div class="loc-track">
@@ -75,28 +79,7 @@
       </div>
     </div>
     <!-- 홈 탭바 -->
-    <nav class="tabbar">
-      <div class="tab active" id="tab-home">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="#1D9E75" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="#1D9E75" stroke-width="1.5"/></svg>
-        <span>홈</span>
-      </div>
-      <div class="tab" onclick="showScreen('timetable')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <span>버스시간표</span>
-      </div>
-      <div class="tab" onclick="showScreen('routes')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/><path d="M2 10h18" stroke="currentColor" stroke-width="1.3"/></svg>
-        <span>버스노선도</span>
-      </div>
-      <div class="tab" onclick="showScreen('transport')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="currentColor"/><circle cx="16" cy="16.5" r="2" fill="currentColor"/><path d="M2 19h18" stroke="currentColor" stroke-width="1.3"/></svg>
-        <span>시외버스·기차</span>
-      </div>
-      <div class="tab" onclick="showScreen('favorites')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" stroke="#EF9F27" stroke-width="1.5" stroke-linejoin="round"/></svg>
-        <span>즐겨찾기</span>
-      </div>
-    </nav>
+    <nav class="tabbar" id="tabbar-home"></nav>
   </div>
 
   <!-- ==================== 검색결과 화면 ==================== -->
@@ -110,28 +93,7 @@
     </div>
     <div class="result-body" id="result-body"></div>
     <!-- 탭바 -->
-    <nav class="tabbar">
-      <div class="tab active" id="tab-result" onclick="showScreen('home')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="#1D9E75" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="#1D9E75" stroke-width="1.5"/></svg>
-        <span>홈</span>
-      </div>
-      <div class="tab" onclick="showScreen('timetable')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="#EF9F27" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="#EF9F27" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <span>버스시간표</span>
-      </div>
-      <div class="tab" onclick="showScreen('routes')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="#185FA5" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="#185FA5"/><circle cx="16" cy="14" r="2" fill="#185FA5"/><path d="M2 10h18" stroke="#185FA5" stroke-width="1.3"/></svg>
-        <span>버스노선도</span>
-      </div>
-      <div class="tab" onclick="showScreen('transport')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="#7F77DD" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="#7F77DD"/><circle cx="16" cy="16.5" r="2" fill="#7F77DD"/><path d="M2 19h18" stroke="#7F77DD" stroke-width="1.3"/></svg>
-        <span>시외버스·기차</span>
-      </div>
-      <div class="tab" onclick="showScreen('favorites')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
-        <span>즐겨찾기</span>
-      </div>
-    </nav>
+    <nav class="tabbar" id="tabbar-result"></nav>
   </div>
 
   <!-- ==================== 경로상세 화면 ==================== -->
@@ -142,35 +104,14 @@
       <!-- 경로 카드 오버레이 -->
       <div id="detail-card" style="position:absolute;top:12px;left:52px;right:12px;background:#fff;border-radius:12px;padding:10px 12px;box-shadow:0 2px 12px rgba(0,0,0,.15);z-index:10"></div>
       <!-- 현위치 버튼 -->
-      <button class="my-loc-btn" style="bottom:12px" onclick="if(STATE.mapDetail){STATE.mapDetail.panTo(new kakao.maps.LatLng(STATE.myLocation.lat,STATE.myLocation.lng))}">
+      <button class="my-loc-btn" style="bottom:12px" onclick="goToMyLocationDetail()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="#185FA5" stroke-width="1.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15" stroke="#185FA5" stroke-width="1.5" stroke-linecap="round"/></svg>
       </button>
     </div>
     <div class="detail-sheet">
       <div class="stop-list" id="stop-list"></div>
     </div>
-    <nav class="tabbar">
-      <div class="tab active" onclick="showScreen('home')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="#1D9E75" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="#1D9E75" stroke-width="1.5"/></svg>
-        <span>홈</span>
-      </div>
-      <div class="tab" onclick="showScreen('timetable')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="#EF9F27" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="#EF9F27" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <span>버스시간표</span>
-      </div>
-      <div class="tab" onclick="showScreen('routes')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="#185FA5" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="#185FA5"/><circle cx="16" cy="14" r="2" fill="#185FA5"/><path d="M2 10h18" stroke="#185FA5" stroke-width="1.3"/></svg>
-        <span>버스노선도</span>
-      </div>
-      <div class="tab" onclick="showScreen('transport')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="#7F77DD" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="#7F77DD"/><circle cx="16" cy="16.5" r="2" fill="#7F77DD"/><path d="M2 19h18" stroke="#7F77DD" stroke-width="1.3"/></svg>
-        <span>시외버스·기차</span>
-      </div>
-      <div class="tab" onclick="showScreen('favorites')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
-        <span>즐겨찾기</span>
-      </div>
-    </nav>
+    <nav class="tabbar" id="tabbar-detail"></nav>
   </div>
 
   <!-- ==================== 버스시간표 화면 ==================== -->
@@ -187,28 +128,7 @@
     <div class="tt-body" id="timetable-body">
       <div style="text-align:center;padding:40px;color:var(--text-3);font-size:13px">정류장명을 검색하세요</div>
     </div>
-    <nav class="tabbar">
-      <div class="tab" onclick="showScreen('home')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
-        <span>홈</span>
-      </div>
-      <div class="tab active" id="tab-timetable">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="#EF9F27" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="#EF9F27" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <span>버스시간표</span>
-      </div>
-      <div class="tab" onclick="showScreen('routes')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/><path d="M2 10h18" stroke="currentColor" stroke-width="1.3"/></svg>
-        <span>버스노선도</span>
-      </div>
-      <div class="tab" onclick="showScreen('transport')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="currentColor"/><circle cx="16" cy="16.5" r="2" fill="currentColor"/><path d="M2 19h18" stroke="currentColor" stroke-width="1.3"/></svg>
-        <span>시외버스·기차</span>
-      </div>
-      <div class="tab" onclick="showScreen('favorites')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
-        <span>즐겨찾기</span>
-      </div>
-    </nav>
+    <nav class="tabbar" id="tabbar-timetable"></nav>
   </div>
 
   <!-- ==================== 버스노선도 화면 ==================== -->
@@ -219,28 +139,7 @@
     </div>
     <div id="map-routes" class="map-container" style="height:220px;flex-shrink:0"></div>
     <div class="routes-list" id="route-list"></div>
-    <nav class="tabbar">
-      <div class="tab" onclick="showScreen('home')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
-        <span>홈</span>
-      </div>
-      <div class="tab" onclick="showScreen('timetable')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <span>버스시간표</span>
-      </div>
-      <div class="tab active" id="tab-routes">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="#185FA5" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="#185FA5"/><circle cx="16" cy="14" r="2" fill="#185FA5"/><path d="M2 10h18" stroke="#185FA5" stroke-width="1.3"/></svg>
-        <span>버스노선도</span>
-      </div>
-      <div class="tab" onclick="showScreen('transport')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="currentColor"/><circle cx="16" cy="16.5" r="2" fill="currentColor"/><path d="M2 19h18" stroke="currentColor" stroke-width="1.3"/></svg>
-        <span>시외버스·기차</span>
-      </div>
-      <div class="tab" onclick="showScreen('favorites')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
-        <span>즐겨찾기</span>
-      </div>
-    </nav>
+    <nav class="tabbar" id="tabbar-routes"></nav>
   </div>
 
   <!-- ==================== 시외버스·기차 화면 ==================== -->
@@ -256,28 +155,7 @@
       </div>
     </div>
     <div class="transport-body" id="transport-body"></div>
-    <nav class="tabbar">
-      <div class="tab" onclick="showScreen('home')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
-        <span>홈</span>
-      </div>
-      <div class="tab" onclick="showScreen('timetable')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <span>버스시간표</span>
-      </div>
-      <div class="tab" onclick="showScreen('routes')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/><path d="M2 10h18" stroke="currentColor" stroke-width="1.3"/></svg>
-        <span>버스노선도</span>
-      </div>
-      <div class="tab active" id="tab-transport">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="#7F77DD" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="#7F77DD"/><circle cx="16" cy="16.5" r="2" fill="#7F77DD"/><path d="M2 19h18" stroke="#7F77DD" stroke-width="1.3"/></svg>
-        <span>시외버스·기차</span>
-      </div>
-      <div class="tab" onclick="showScreen('favorites')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
-        <span>즐겨찾기</span>
-      </div>
-    </nav>
+    <nav class="tabbar" id="tabbar-transport"></nav>
   </div>
 
   <!-- ==================== 즐겨찾기 화면 ==================== -->
@@ -287,28 +165,7 @@
       <div style="font-size:11px;color:var(--text-2);margin-top:2px">탭하면 홈에서 바로 검색</div>
     </div>
     <div class="fav-body" id="favorites-body"></div>
-    <nav class="tabbar">
-      <div class="tab" onclick="showScreen('home')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 11L11 3L19 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="7" y="12" width="8" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
-        <span>홈</span>
-      </div>
-      <div class="tab" onclick="showScreen('timetable')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h16M8 4V8M14 4V8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-        <span>버스시간표</span>
-      </div>
-      <div class="tab" onclick="showScreen('routes')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="6" width="18" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/><path d="M2 10h18" stroke="currentColor" stroke-width="1.3"/></svg>
-        <span>버스노선도</span>
-      </div>
-      <div class="tab" onclick="showScreen('transport')">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="5" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="16.5" r="2" fill="currentColor"/><circle cx="16" cy="16.5" r="2" fill="currentColor"/><path d="M2 19h18" stroke="currentColor" stroke-width="1.3"/></svg>
-        <span>시외버스·기차</span>
-      </div>
-      <div class="tab active" id="tab-favorites">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8L5.6 18.7l1-6L2.2 8.4l6.1-.9z" fill="#EF9F27" stroke="#EF9F27" stroke-width="0.5" stroke-linejoin="round"/></svg>
-        <span>즐겨찾기</span>
-      </div>
-    </nav>
+    <nav class="tabbar" id="tabbar-favorites"></nav>
   </div>
 
   <!-- ==================== 장소 검색 모달 ==================== -->
@@ -322,6 +179,32 @@
       <div class="modal-scroll">
         <div id="modal-results"></div>
         <div id="modal-saved"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 키 설정 모달 ==================== -->
+  <div id="settings-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSettingsModal()">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">⚙ 앱 설정</span>
+        <button class="modal-close" onclick="closeSettingsModal()">✕</button>
+      </div>
+      <div class="modal-scroll" style="padding:12px 14px">
+        <p style="font-size:12px;color:var(--text-2);line-height:1.6;margin:0 0 14px">
+          카카오 개발자 콘솔에서 발급받은 키를 입력하세요.<br>
+          키는 이 기기에만 저장되며 서버로 전송되지 않습니다.
+        </p>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;font-weight:600;color:var(--text-2)">JavaScript 앱 키 (지도 표시용)</label>
+          <input type="text" id="settings-js-key" class="modal-input" placeholder="예: ea4bdbbdf5c627ab..." style="margin-top:5px">
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="font-size:11px;font-weight:600;color:var(--text-2)">REST API 키 (경로 탐색용)</label>
+          <input type="text" id="settings-rest-key" class="modal-input" placeholder="예: a0aa52b4b6223f8d..." style="margin-top:5px">
+        </div>
+        <button onclick="saveSettings()" style="width:100%;padding:12px;background:#1D9E75;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">저장 후 앱 재시작</button>
+        <div id="settings-msg" style="font-size:12px;color:#0F6E56;text-align:center;margin-top:8px;display:none"></div>
       </div>
     </div>
   </div>
@@ -340,6 +223,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
+  renderAllTabbars();  // 탭바 최초 렌더링
   initLocation();
   initRoutesScreen();
   loadKakaoMap();
@@ -360,20 +244,48 @@ function swapFromTo() {
 }
 
 function goToMyLocation() {
-  if (STATE.mapHome) {
-    STATE.mapHome.panTo(new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng));
-  }
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(pos => {
+    STATE.myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    STATE.gpsReady = true;
+    if (STATE.mapHome) {
+      const ll = new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng);
+      STATE.mapHome.panTo(ll);
+      updateMyMarker(STATE.mapHome, ll);
+    }
+    if (!isInSeocheon(STATE.myLocation.lat, STATE.myLocation.lng)) showOutOfArea();
+    else {
+      const ex = document.getElementById('out-of-area');
+      if (ex) ex.remove();
+    }
+  }, () => {
+    // GPS 실패 시 기존 위치로 이동
+    if (STATE.mapHome && STATE.myLocation) {
+      STATE.mapHome.panTo(new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng));
+    }
+  });
 }
 </script>
 
-<!-- 카카오맵 SDK -->
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&autoload=false&libraries=services,clusterer"></script>
+<!-- 카카오맵 SDK — JS 키를 localStorage(sc_kakao_js_key)에서 동적 로드 -->
+<script>
+(function() {
+  const jsKey = localStorage.getItem('sc_kakao_js_key') || '';
+  if (!jsKey) {
+    console.warn('카카오맵 JS 키가 없습니다. 앱 설정(⚙)에서 키를 입력해 주세요.');
+    return;
+  }
+  const s = document.createElement('script');
+  s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${jsKey}&autoload=false&libraries=services,clusterer`;
+  document.head.appendChild(s);
+})();
+</script>
 
-<!-- 앱 시작 시 저장된 REST 키 불러오기 -->
+<!-- 저장된 카카오 키 불러오기 -->
 <script>
 window.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('sc_kakao_rest_key');
-  if (saved) window._kakaoRestKey = saved;
+  const savedRest = localStorage.getItem('sc_kakao_rest_key');
+  if (savedRest) window._kakaoRestKey = savedRest;
 });
 </script>
 
