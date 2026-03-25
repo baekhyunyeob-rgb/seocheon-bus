@@ -2,10 +2,8 @@
 
 // ==================== 상수 ====================
 // 카카오맵 JS 키 (지도 표시용 — index.html의 SDK 로드에도 동일하게 사용)
-// ⚠️ 키는 소스에 직접 넣지 않습니다.
-// 앱 설정 화면(⚙) 또는 localStorage 'sc_kakao_js_key' / 'sc_kakao_rest_key' 에 저장하세요.
-const KAKAO_JS_KEY  = '';
-const KAKAO_REST_KEY = '';
+const KAKAO_JS_KEY   = 'ea4bdbbdf5c627aba4db0a4b163c9b0d';
+const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
 
 const SEOCHEON_BOUNDS = { minLat:35.97, maxLat:36.22, minLng:126.49, maxLng:126.89 };
 

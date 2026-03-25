@@ -630,7 +630,6 @@ function quickSearchTo(name,lat,lng) {
 
 // ==================== 앱 설정 모달 ====================
 function openSettingsModal() {
-  document.getElementById('settings-js-key').value   = localStorage.getItem('sc_kakao_js_key')   || '';
   document.getElementById('settings-rest-key').value = localStorage.getItem('sc_kakao_rest_key') || '';
   document.getElementById('settings-msg').style.display = 'none';
   document.getElementById('settings-modal').style.display = 'flex';
@@ -641,13 +640,13 @@ function closeSettingsModal() {
 }
 
 function saveSettings() {
-  const jsKey   = document.getElementById('settings-js-key').value.trim();
   const restKey = document.getElementById('settings-rest-key').value.trim();
-  if (jsKey)   localStorage.setItem('sc_kakao_js_key',   jsKey);
-  if (restKey) localStorage.setItem('sc_kakao_rest_key', restKey);
-  window._kakaoRestKey = restKey;
+  if (restKey) {
+    localStorage.setItem('sc_kakao_rest_key', restKey);
+    window._kakaoRestKey = restKey;
+  }
   const msg = document.getElementById('settings-msg');
-  msg.textContent = '✅ 저장 완료! 지도를 새로 불러옵니다...';
+  msg.textContent = '✅ 저장되었습니다.';
   msg.style.display = 'block';
-  setTimeout(() => location.reload(), 1200);
+  setTimeout(closeSettingsModal, 1000);
 }
