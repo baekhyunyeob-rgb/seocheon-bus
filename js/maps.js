@@ -3,20 +3,18 @@
 // ==================== 카카오맵 로드 ====================
 function loadKakaoMap() {
   if (typeof kakao === 'undefined' || typeof kakao.maps === 'undefined') {
-    // 최초 호출 시 타이머 시작
     if (!loadKakaoMap._retryCount) loadKakaoMap._retryCount = 0;
     loadKakaoMap._retryCount++;
     if (loadKakaoMap._retryCount > 10) {
-      // 5초(500ms × 10) 이상 로드 안 되면 사용자에게 안내
       const ex = document.getElementById('map-error-banner');
       if (!ex) {
         const banner = document.createElement('div');
         banner.id = 'map-error-banner';
         banner.style.cssText = [
-          'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:9999',
-          'background:#FCEBEB', 'color:#A32D2D',
-          'font-size:13px', 'text-align:center',
-          'padding:10px 16px', 'line-height:1.5',
+          'position:fixed','top:0','left:0','right:0','z-index:9999',
+          'background:#FCEBEB','color:#A32D2D',
+          'font-size:13px','text-align:center',
+          'padding:10px 16px','line-height:1.5',
         ].join(';');
         banner.textContent = '⚠️ 지도를 불러오지 못했습니다. 네트워크를 확인하거나 새로고침해 주세요.';
         document.body.prepend(banner);
@@ -31,6 +29,92 @@ function loadKakaoMap() {
   });
 }
 
+// ==================== 도로 Polyline (Lazy 로드) ====================
+// 정류장 좌표를 경유지로 카카오 Directions API 호출 → 실제 도로선
+// 결과는 STATE.roadPolylineCache 에 저장해 재사용
+
+const ROAD_CHUNK       = 5; // 출발+경유3+도착
+const ROAD_CONCURRENCY = 3; // 동시 요청 수
+
+async function fetchRoadPolyline(stops) {
+  if (!stops || stops.length < 2) return stops.map(s => ({ lat: s.lat, lng: s.lng }));
+
+  // CHUNK 단위 분할 (앞뒤 1점 겹침)
+  const segments = [];
+  for (let i = 0; i < stops.length - 1; i += ROAD_CHUNK - 1) {
+    segments.push(stops.slice(i, Math.min(i + ROAD_CHUNK, stops.length)));
+    if (i + ROAD_CHUNK >= stops.length) break;
+  }
+
+  const restKey = localStorage.getItem('sc_kakao_rest_key') || KAKAO_REST_KEY;
+  let polyline = [];
+
+  for (let si = 0; si < segments.length; si += ROAD_CONCURRENCY) {
+    const batch = segments.slice(si, si + ROAD_CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(async seg => {
+      const origin = `${seg[0].lng},${seg[0].lat}`;
+      const dest   = `${seg[seg.length - 1].lng},${seg[seg.length - 1].lat}`;
+      const wps    = seg.slice(1, -1).map(s => `${s.lng},${s.lat}`).join('|');
+      let url = `https://apis-navi.kakaomobility.com/v1/directions?origin=${origin}&destination=${dest}&priority=RECOMMEND`;
+      if (wps) url += `&waypoints=${wps}`;
+      try {
+        const res  = await fetch(url, { headers: { Authorization: `KakaoAK ${restKey}` } });
+        const data = await res.json();
+        const pts  = [];
+        for (const section of data?.routes?.[0]?.sections || []) {
+          for (const road of section.roads || []) {
+            const vx = road.vertexes || [];
+            for (let i = 0; i < vx.length - 1; i += 2) {
+              pts.push({ lat: vx[i + 1], lng: vx[i] });
+            }
+          }
+        }
+        return pts.length ? pts : seg.map(s => ({ lat: s.lat, lng: s.lng }));
+      } catch {
+        return seg.map(s => ({ lat: s.lat, lng: s.lng }));
+      }
+    }));
+
+    for (const pts of batchResults) {
+      if (polyline.length && pts.length) pts.shift(); // 앞 중복 제거
+      polyline = polyline.concat(pts);
+    }
+  }
+  return polyline;
+}
+
+// 노선 키 → 도로 polyline 반환 (캐시 우선)
+async function getRoadPolyline(route) {
+  if (!STATE.roadPolylineCache) STATE.roadPolylineCache = new Map();
+  const key = route['번호'] + '_' + route['기점'];
+  if (STATE.roadPolylineCache.has(key)) return STATE.roadPolylineCache.get(key);
+
+  const stops = getRouteCoords(route).filter(c => c.lat && c.lng);
+  if (stops.length < 2) return stops;
+
+  const road = await fetchRoadPolyline(stops);
+  STATE.roadPolylineCache.set(key, road);
+  return road;
+}
+
+// 직선 polyline → 도로선으로 교체
+// polylineHolder: { obj: kakao.maps.Polyline | null }
+async function upgradeToRoadPolyline(mapObj, polylineHolder, route, color, onDone) {
+  try {
+    const road = await getRoadPolyline(route);
+    if (!mapObj || !road.length) return;
+    if (polylineHolder.obj) { polylineHolder.obj.setMap(null); polylineHolder.obj = null; }
+    polylineHolder.obj = new kakao.maps.Polyline({
+      map: mapObj,
+      path: road.map(p => new kakao.maps.LatLng(p.lat, p.lng)),
+      strokeWeight: 4, strokeColor: color, strokeOpacity: 0.9, strokeStyle: 'solid',
+    });
+    if (onDone) onDone(road);
+  } catch (e) {
+    console.warn('도로 polyline 로드 실패, 직선 유지:', e);
+  }
+}
+
 // ==================== 홈 지도 ====================
 function initHomeMap() {
   const el = document.getElementById('map-home');
@@ -41,17 +125,14 @@ function initHomeMap() {
   });
   STATE.mapHome.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
 
-  // 줌 레벨 6 이하: 근처 정류장 표시
-  let stopOverlays = [];
-  let lastLevel = 8;
+  let stopOverlays = [], lastLevel = 8;
   const showStopDots = () => {
-    stopOverlays.forEach(o => o.setMap(null));
-    stopOverlays = [];
+    stopOverlays.forEach(o => o.setMap(null)); stopOverlays = [];
     const bounds = STATE.mapHome.getBounds();
     STOPS.filter(s =>
       s.lat >= bounds.getSouthWest().getLat() && s.lat <= bounds.getNorthEast().getLat() &&
       s.lng >= bounds.getSouthWest().getLng() && s.lng <= bounds.getNorthEast().getLng()
-    ).slice(0,200).forEach(s => {
+    ).slice(0, 200).forEach(s => {
       const disp = s.displayName || s.name;
       const ov = new kakao.maps.CustomOverlay({
         position: new kakao.maps.LatLng(s.lat, s.lng),
@@ -62,21 +143,18 @@ function initHomeMap() {
         </div>`,
         yAnchor: 1.4, zIndex: 3,
       });
-      ov.setMap(STATE.mapHome);
-      stopOverlays.push(ov);
+      ov.setMap(STATE.mapHome); stopOverlays.push(ov);
     });
   };
   kakao.maps.event.addListener(STATE.mapHome, 'zoom_changed', () => {
     const lv = STATE.mapHome.getLevel();
     if (lv <= 6 && lastLevel > 6) showStopDots();
-    else if (lv > 6 && stopOverlays.length) { stopOverlays.forEach(o=>o.setMap(null)); stopOverlays=[]; }
+    else if (lv > 6 && stopOverlays.length) { stopOverlays.forEach(o => o.setMap(null)); stopOverlays = []; }
     lastLevel = lv;
   });
   kakao.maps.event.addListener(STATE.mapHome, 'dragend', () => {
     if (STATE.mapHome.getLevel() <= 6) showStopDots();
   });
-
-  // GPS 3초 후 fallback
   setTimeout(() => { if (!STATE.myMarker) updateMyMarker(STATE.mapHome, new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng)); }, 3000);
 }
 
@@ -95,7 +173,7 @@ function updateMyMarker(map, latlng) {
   STATE.myMarker.setMap(map);
 }
 
-// 핀 마커 생성 (홈화면/상세화면 공통)
+// 핀 마커
 function makePinOverlay(lat, lng, color, label) {
   return new kakao.maps.CustomOverlay({
     position: new kakao.maps.LatLng(lat, lng),
@@ -108,7 +186,6 @@ function makePinOverlay(lat, lng, color, label) {
   });
 }
 
-// 핀 마커 (핀 모양, 지도 위 핀)
 function makeLocationPin(lat, lng, color) {
   return new kakao.maps.CustomOverlay({
     position: new kakao.maps.LatLng(lat, lng),
@@ -123,11 +200,9 @@ function makeLocationPin(lat, lng, color) {
 // 홈 지도 마커 업데이트
 function updateHomeMarkers() {
   if (!STATE.mapHome) return;
-  if (STATE.homeFromMarker) { STATE.homeFromMarker.setMap(null); STATE.homeFromMarker=null; }
-  if (STATE.homeToMarker)   { STATE.homeToMarker.setMap(null);   STATE.homeToMarker=null; }
-
+  if (STATE.homeFromMarker) { STATE.homeFromMarker.setMap(null); STATE.homeFromMarker = null; }
+  if (STATE.homeToMarker)   { STATE.homeToMarker.setMap(null);   STATE.homeToMarker = null; }
   const fr = STATE.search.from, to = STATE.search.to;
-
   if (fr?.lat && !fr.isGps) {
     STATE.homeFromMarker = makeLocationPin(fr.lat, fr.lng, '#185FA5');
     STATE.homeFromMarker.setMap(STATE.mapHome);
@@ -154,118 +229,111 @@ function initDetailMap(result) {
   });
 
   // 기존 오버레이 정리
-  STATE.detailMarkers.forEach(m => m.setMap(null));
-  STATE.detailMarkers = [];
-  STATE.detailSnappedMarkers.forEach(m => m.setMap(null));
-  STATE.detailSnappedMarkers = [];
-  if (STATE.detailPolyline) { STATE.detailPolyline.setMap(null); STATE.detailPolyline=null; }
+  STATE.detailMarkers.forEach(m => m.setMap(null)); STATE.detailMarkers = [];
+  if (STATE.detailPolyline) { STATE.detailPolyline.setMap(null); STATE.detailPolyline = null; }
+  if (STATE.detailPolyline2) { STATE.detailPolyline2.setMap(null); STATE.detailPolyline2 = null; }
 
-  // snapped 마커 zoom 연동
-  kakao.maps.event.addListener(STATE.mapDetail, 'zoom_changed', () => {
-    const lv = STATE.mapDetail.getLevel();
-    STATE.detailSnappedMarkers.forEach(m => m.setMap(lv <= 4 ? STATE.mapDetail : null));
-  });
+  const color  = getZoneColor(result.route);
+  const allCoords = getRouteCoords(result.route).filter(c => c.lat);
 
-  const color = getZoneColor(result.route);
-  const allCoords = getRouteCoords(result.route).filter(c=>c.lat);
-
-  // 출발·도착 좌표 결정
-  const fr = STATE.search.from?.isGps ? {lat:STATE.myLocation.lat,lng:STATE.myLocation.lng} : (STATE.search.from || {});
+  const fr = STATE.search.from?.isGps
+    ? { lat: STATE.myLocation.lat, lng: STATE.myLocation.lng }
+    : (STATE.search.from || {});
   const to = STATE.search.to || {};
 
-  // 구간 추출
+  // 탑승~하차 구간 추출
   let segCoords = allCoords;
   if (fr.lat && to.lat && allCoords.length) {
-    let fiI=0,fiD=9e9,tiI=allCoords.length-1,tiD=9e9;
-    allCoords.forEach((c,i) => {
-      const df=distM(c.lat,c.lng,fr.lat,fr.lng), dt=distM(c.lat,c.lng,to.lat,to.lng);
-      if(df<fiD){fiD=df;fiI=i;} if(dt<tiD){tiD=dt;tiI=i;}
+    let fiI = 0, fiD = 9e9, tiI = allCoords.length - 1, tiD = 9e9;
+    allCoords.forEach((c, i) => {
+      const df = distM(c.lat, c.lng, fr.lat, fr.lng);
+      const dt = distM(c.lat, c.lng, to.lat, to.lng);
+      if (df < fiD) { fiD = df; fiI = i; }
+      if (dt < tiD) { tiD = dt; tiI = i; }
     });
-    if (fiI > tiI) [fiI,tiI]=[tiI,fiI];
-    segCoords = allCoords.slice(fiI, tiI+1);
+    if (fiI > tiI) [fiI, tiI] = [tiI, fiI];
+    segCoords = allCoords.slice(fiI, tiI + 1);
   }
 
-  // 지나온 구간 (흐리게)
-  const myLat=STATE.myLocation.lat, myLng=STATE.myLocation.lng;
-  const myI = findNearestIdx(segCoords, myLat, myLng);
+  const myLat = STATE.myLocation.lat, myLng = STATE.myLocation.lng;
+  const myI   = findNearestIdx(segCoords, myLat, myLng);
+
+  // 직선 polyline 먼저 그리기 (즉시 표시)
+  const detailPolylineHolder  = { obj: null };
+  const detailPolyline2Holder = { obj: null };
 
   if (segCoords.length >= 2) {
-    // 지나온 구간
+    // 지나온 구간 (흐리게)
     if (myI > 0) {
-      const pastPath = segCoords.slice(0, myI+1).map(c=>new kakao.maps.LatLng(c.lat,c.lng));
-      new kakao.maps.Polyline({ map:STATE.mapDetail, path:pastPath, strokeWeight:4, strokeColor:color, strokeOpacity:0.25, strokeStyle:'solid' });
+      const pastPath = segCoords.slice(0, myI + 1).map(c => new kakao.maps.LatLng(c.lat, c.lng));
+      new kakao.maps.Polyline({ map: STATE.mapDetail, path: pastPath, strokeWeight: 4, strokeColor: color, strokeOpacity: 0.25, strokeStyle: 'solid' });
     }
     // 남은 구간
-    const futurePath = segCoords.slice(myI).map(c=>new kakao.maps.LatLng(c.lat,c.lng));
-    STATE.detailPolyline = new kakao.maps.Polyline({ map:STATE.mapDetail, path:futurePath, strokeWeight:4, strokeColor:color, strokeOpacity:0.9, strokeStyle:'solid' });
+    const futurePath = segCoords.slice(myI).map(c => new kakao.maps.LatLng(c.lat, c.lng));
+    detailPolylineHolder.obj = new kakao.maps.Polyline({
+      map: STATE.mapDetail, path: futurePath,
+      strokeWeight: 4, strokeColor: color, strokeOpacity: 0.9, strokeStyle: 'solid',
+    });
+    STATE.detailPolyline = detailPolylineHolder.obj;
+
+    // 도로선으로 lazy 업그레이드
+    upgradeToRoadPolyline(STATE.mapDetail, detailPolylineHolder, result.route, color, () => {
+      STATE.detailPolyline = detailPolylineHolder.obj;
+    });
   }
 
   // 환승 2구간
   if (result.type === 'transfer') {
-    const c2 = getRouteCoords(result.route2).filter(c=>c.lat);
+    const c2     = getRouteCoords(result.route2).filter(c => c.lat);
     const color2 = getZoneColor(result.route2);
     if (c2.length >= 2) {
-      new kakao.maps.Polyline({ map:STATE.mapDetail, path:c2.map(c=>new kakao.maps.LatLng(c.lat,c.lng)), strokeWeight:4, strokeColor:color2, strokeOpacity:0.85, strokeStyle:'solid' });
+      detailPolyline2Holder.obj = new kakao.maps.Polyline({
+        map: STATE.mapDetail, path: c2.map(c => new kakao.maps.LatLng(c.lat, c.lng)),
+        strokeWeight: 4, strokeColor: color2, strokeOpacity: 0.85, strokeStyle: 'solid',
+      });
+      STATE.detailPolyline2 = detailPolyline2Holder.obj;
+
+      upgradeToRoadPolyline(STATE.mapDetail, detailPolyline2Holder, result.route2, color2, () => {
+        STATE.detailPolyline2 = detailPolyline2Holder.obj;
+      });
     }
   }
 
-  // 정류장 점 (stops_data → 원형 항상 표시 / snapped → 다이아몬드+라벨 level<=4에서만)
-  const detailInitLevel = STATE.mapDetail.getLevel();
-  segCoords.forEach((c,i) => {
-    if (!c.lat || i===0||i===segCoords.length-1) return;
-    const isSnapped = c.source === 'snapped';
-    let content;
-    if (isSnapped) {
-      content = `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none">
-        <div style="background:#FF6B00;color:#fff;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);margin-bottom:2px">${c.name}</div>
-        <div style="width:8px;height:8px;background:#FF6B00;border:1.5px solid #fff;transform:rotate(45deg);box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>
-      </div>`;
-    } else {
-      content = `<div style="width:6px;height:6px;background:${color};border:1.5px solid #fff;border-radius:50%"></div>`;
-    }
+  // 정류장 점 (BIS 데이터는 모두 stops_data → 동일 스타일)
+  segCoords.forEach((c, i) => {
+    if (!c.lat || i === 0 || i === segCoords.length - 1) return;
     const dot = new kakao.maps.CustomOverlay({
-      position: new kakao.maps.LatLng(c.lat,c.lng),
-      content,
-      yAnchor: isSnapped ? 1.8 : 0.5,
-      zIndex: isSnapped ? 5 : 3,
+      position: new kakao.maps.LatLng(c.lat, c.lng),
+      content: `<div style="width:6px;height:6px;background:${color};border:1.5px solid #fff;border-radius:50%"></div>`,
+      yAnchor: 0.5, zIndex: 3,
     });
-    if (isSnapped) {
-      dot.setMap(detailInitLevel <= 4 ? STATE.mapDetail : null);
-      STATE.detailSnappedMarkers.push(dot);
-    } else {
-      dot.setMap(STATE.mapDetail);
-      STATE.detailMarkers.push(dot);
-    }
+    dot.setMap(STATE.mapDetail);
+    STATE.detailMarkers.push(dot);
   });
 
   // 현재 위치
-  updateMyMarker(STATE.mapDetail, new kakao.maps.LatLng(myLat,myLng));
+  updateMyMarker(STATE.mapDetail, new kakao.maps.LatLng(myLat, myLng));
 
   // 출발·도착 핀
-  if (fr.lat) { const p=makeLocationPin(fr.lat,fr.lng,'#185FA5'); p.setMap(STATE.mapDetail); STATE.detailMarkers.push(p); }
-  if (to.lat) { const p=makeLocationPin(to.lat,to.lng,'#E24B4A'); p.setMap(STATE.mapDetail); STATE.detailMarkers.push(p); }
+  if (fr.lat) { const p = makeLocationPin(fr.lat, fr.lng, '#185FA5'); p.setMap(STATE.mapDetail); STATE.detailMarkers.push(p); }
+  if (to.lat) { const p = makeLocationPin(to.lat, to.lng, '#E24B4A'); p.setMap(STATE.mapDetail); STATE.detailMarkers.push(p); }
 
   // 범위 조정
   const bounds = new kakao.maps.LatLngBounds();
-  if (fr.lat) bounds.extend(new kakao.maps.LatLng(fr.lat,fr.lng));
-  if (to.lat) bounds.extend(new kakao.maps.LatLng(to.lat,to.lng));
-  if (fr.lat||to.lat) STATE.mapDetail.setBounds(bounds, 80);
+  if (fr.lat) bounds.extend(new kakao.maps.LatLng(fr.lat, fr.lng));
+  if (to.lat) bounds.extend(new kakao.maps.LatLng(to.lat, to.lng));
+  if (fr.lat || to.lat) STATE.mapDetail.setBounds(bounds, 80);
 }
 
 // ==================== 노선도 지도 ====================
 function initRoutesMap() {
   const el = document.getElementById('map-routes');
   if (!el) return;
-  if (typeof kakao === 'undefined' || !kakao.maps) { setTimeout(initRoutesMap,300); return; }
+  if (typeof kakao === 'undefined' || !kakao.maps) { setTimeout(initRoutesMap, 300); return; }
   kakao.maps.load(() => {
     if (STATE.mapRoutes) return;
     STATE.mapRoutes = new kakao.maps.Map(el, {
-      center: new kakao.maps.LatLng(36.0758,126.6908), level:10,
-    });
-    // snapped 마커 zoom 연동: level 4 이하(충분히 확대)일 때만 표시
-    kakao.maps.event.addListener(STATE.mapRoutes, 'zoom_changed', () => {
-      const lv = STATE.mapRoutes.getLevel();
-      STATE.snappedMarkers.forEach(m => m.setMap(lv <= 4 ? STATE.mapRoutes : null));
+      center: new kakao.maps.LatLng(36.0758, 126.6908), level: 10,
     });
     if (STATE.selectedRoute) {
       showRouteOnMap(STATE.selectedRoute, STATE.timetableSearchStop || null);
@@ -275,89 +343,52 @@ function initRoutesMap() {
 
 function showRouteOnMap(route, searchStop) {
   if (!STATE.mapRoutes) return;
-  STATE.routeMarkers.forEach(m=>m.setMap(null)); STATE.routeMarkers=[];
-  if (STATE.routePolyline) { STATE.routePolyline.setMap(null); STATE.routePolyline=null; }
-  // 이전 검색 정류장 마커 제거
-  if (STATE.searchStopMarker) { STATE.searchStopMarker.setMap(null); STATE.searchStopMarker=null; }
+  STATE.routeMarkers.forEach(m => m.setMap(null)); STATE.routeMarkers = [];
+  if (STATE.routePolyline) { STATE.routePolyline.setMap(null); STATE.routePolyline = null; }
+  if (STATE.searchStopMarker) { STATE.searchStopMarker.setMap(null); STATE.searchStopMarker = null; }
 
   const color  = getZoneColor(route);
-  const coords = getRouteCoords(route).filter(c=>c.lat);
+  const coords = getRouteCoords(route).filter(c => c.lat);
   if (coords.length < 2) return;
 
-  const path = coords.map(c=>new kakao.maps.LatLng(c.lat,c.lng));
+  // 직선 polyline 먼저 (즉시 표시)
+  const routePolylineHolder = { obj: null };
+  routePolylineHolder.obj = new kakao.maps.Polyline({
+    map: STATE.mapRoutes,
+    path: coords.map(c => new kakao.maps.LatLng(c.lat, c.lng)),
+    strokeWeight: 4, strokeColor: color, strokeOpacity: 0.9, strokeStyle: 'solid',
+  });
+  STATE.routePolyline = routePolylineHolder.obj;
 
-  // 메인 폴리라인
-  STATE.routePolyline = new kakao.maps.Polyline({
-    map:STATE.mapRoutes, path, strokeWeight:4, strokeColor:color, strokeOpacity:0.9, strokeStyle:'solid',
+  // 도로선으로 lazy 업그레이드
+  upgradeToRoadPolyline(STATE.mapRoutes, routePolylineHolder, route, color, (road) => {
+    STATE.routePolyline = routePolylineHolder.obj;
+    // 방향 삼각형 재생성
+    _drawDirectionArrows(STATE.mapRoutes, road, color);
   });
 
-  // 방향 삼각형 (등간격 4개)
-  const totalLen = coords.length;
-  [0.2, 0.4, 0.6, 0.8].forEach(ratio => {
-    const idx = Math.floor(totalLen * ratio);
-    if (idx <= 0 || idx >= totalLen-1) return;
-    const a=coords[idx-1], b=coords[idx+1];
-    if (!a||!b) return;
-    const angle = Math.atan2(b.lat-a.lat, b.lng-a.lng);
-    const size  = 0.0003;
-    const tip  = { lat: coords[idx].lat + Math.sin(angle)*size, lng: coords[idx].lng + Math.cos(angle)*size };
-    const bl   = { lat: coords[idx].lat - Math.sin(angle+Math.PI/2)*size*0.6, lng: coords[idx].lng - Math.cos(angle+Math.PI/2)*size*0.6 };
-    const br   = { lat: coords[idx].lat + Math.sin(angle+Math.PI/2)*size*0.6, lng: coords[idx].lng + Math.cos(angle+Math.PI/2)*size*0.6 };
-    const tri  = new kakao.maps.Polygon({
-      map: STATE.mapRoutes,
-      path: [new kakao.maps.LatLng(tip.lat,tip.lng), new kakao.maps.LatLng(bl.lat,bl.lng), new kakao.maps.LatLng(br.lat,br.lng)],
-      fillColor: color, fillOpacity: 0.9,
-      strokeColor: color, strokeOpacity: 0, strokeWeight: 0,
-    });
-    STATE.routeMarkers.push(tri);
-  });
+  // 방향 삼각형 (직선 상태에서 먼저 그림)
+  _drawDirectionArrows(STATE.mapRoutes, coords, color);
 
-  // 중간 정류장 점
-  // stops_data(원본) → 노선색 원형 점 (항상 표시)
-  // snapped(검증필요) → 주황 다이아몬드 + 이름 라벨 (level<=4 확대 시에만 표시)
-  STATE.snappedMarkers.forEach(m => m.setMap(null));
-  STATE.snappedMarkers = [];
-  const currentLevel = STATE.mapRoutes.getLevel();
-
-  coords.forEach((c,i) => {
-    if (i===0||i===coords.length-1) return;
-    const isSnapped = c.source === 'snapped';
-    let content;
-    if (isSnapped) {
-      content = `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none">
-        <div style="background:#FF6B00;color:#fff;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);margin-bottom:2px">${c.name}</div>
-        <div style="width:8px;height:8px;background:#FF6B00;border:1.5px solid #fff;transform:rotate(45deg);box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>
-      </div>`;
-    } else {
-      content = `<div style="width:5px;height:5px;background:${color};border:1.5px solid #fff;border-radius:50%"></div>`;
-    }
+  // 정류장 점
+  coords.forEach((c, i) => {
+    if (i === 0 || i === coords.length - 1) return;
     const dot = new kakao.maps.CustomOverlay({
-      position: new kakao.maps.LatLng(c.lat,c.lng),
-      content,
-      yAnchor: isSnapped ? 1.8 : 0.5,
-      zIndex: isSnapped ? 5 : 2,
+      position: new kakao.maps.LatLng(c.lat, c.lng),
+      content: `<div style="width:5px;height:5px;background:${color};border:1.5px solid #fff;border-radius:50%"></div>`,
+      yAnchor: 0.5, zIndex: 2,
     });
-    if (isSnapped) {
-      // 현재 zoom이 충분히 확대돼 있을 때만 즉시 표시, 아니면 숨김
-      dot.setMap(currentLevel <= 4 ? STATE.mapRoutes : null);
-      STATE.snappedMarkers.push(dot);
-    } else {
-      dot.setMap(STATE.mapRoutes);
-      STATE.routeMarkers.push(dot);
-    }
+    dot.setMap(STATE.mapRoutes);
+    STATE.routeMarkers.push(dot);
   });
 
-  // 기점 핀 (파랑)
+  // 기점·종점 핀
   const startPin = makeLocationPin(coords[0].lat, coords[0].lng, '#185FA5');
-  startPin.setMap(STATE.mapRoutes);
-  STATE.routeMarkers.push(startPin);
+  startPin.setMap(STATE.mapRoutes); STATE.routeMarkers.push(startPin);
+  const endPin = makeLocationPin(coords[coords.length - 1].lat, coords[coords.length - 1].lng, '#E24B4A');
+  endPin.setMap(STATE.mapRoutes); STATE.routeMarkers.push(endPin);
 
-  // 종점 핀 (빨강)
-  const endPin = makeLocationPin(coords[coords.length-1].lat, coords[coords.length-1].lng, '#E24B4A');
-  endPin.setMap(STATE.mapRoutes);
-  STATE.routeMarkers.push(endPin);
-
-  // ── 검색 정류장 마커 (시간표에서 진입했을 때) ──────────────────
+  // 검색 정류장 마커
   if (searchStop?.lat && searchStop?.lng) {
     const disp = searchStop.displayName || searchStop.name;
     STATE.searchStopMarker = new kakao.maps.CustomOverlay({
@@ -371,17 +402,45 @@ function showRouteOnMap(route, searchStop) {
     });
     STATE.searchStopMarker.setMap(STATE.mapRoutes);
   }
-  // ──────────────────────────────────────────────────────────────
 
   // 지도 범위 조정
   const bounds = new kakao.maps.LatLngBounds();
-  coords.forEach(c => bounds.extend(new kakao.maps.LatLng(c.lat,c.lng)));
+  coords.forEach(c => bounds.extend(new kakao.maps.LatLng(c.lat, c.lng)));
   STATE.mapRoutes.setBounds(bounds, 60);
 }
 
+// 방향 삼각형 (등간격 4개)
+function _drawDirectionArrows(mapObj, coordArr, color) {
+  // 기존 화살표 제거
+  if (!STATE._arrowMarkers) STATE._arrowMarkers = [];
+  STATE._arrowMarkers.forEach(m => m.setMap(null));
+  STATE._arrowMarkers = [];
+
+  const total = coordArr.length;
+  [0.2, 0.4, 0.6, 0.8].forEach(ratio => {
+    const idx = Math.floor(total * ratio);
+    if (idx <= 0 || idx >= total - 1) return;
+    const a = coordArr[idx - 1], b = coordArr[idx + 1];
+    if (!a || !b) return;
+    const angle = Math.atan2(b.lat - a.lat, b.lng - a.lng);
+    const size  = 0.0003;
+    const tip = { lat: coordArr[idx].lat + Math.sin(angle) * size,  lng: coordArr[idx].lng + Math.cos(angle) * size };
+    const bl  = { lat: coordArr[idx].lat - Math.sin(angle + Math.PI / 2) * size * 0.6, lng: coordArr[idx].lng - Math.cos(angle + Math.PI / 2) * size * 0.6 };
+    const br  = { lat: coordArr[idx].lat + Math.sin(angle + Math.PI / 2) * size * 0.6, lng: coordArr[idx].lng + Math.cos(angle + Math.PI / 2) * size * 0.6 };
+    const tri = new kakao.maps.Polygon({
+      map: mapObj,
+      path: [new kakao.maps.LatLng(tip.lat, tip.lng), new kakao.maps.LatLng(bl.lat, bl.lng), new kakao.maps.LatLng(br.lat, br.lng)],
+      fillColor: color, fillOpacity: 0.9,
+      strokeColor: color, strokeOpacity: 0, strokeWeight: 0,
+    });
+    STATE._arrowMarkers.push(tri);
+    STATE.routeMarkers.push(tri);
+  });
+}
+
 function clearRouteMap() {
-  STATE.routeMarkers.forEach(m=>m.setMap(null)); STATE.routeMarkers=[];
-  STATE.snappedMarkers.forEach(m=>m.setMap(null)); STATE.snappedMarkers=[];
-  if (STATE.routePolyline) { STATE.routePolyline.setMap(null); STATE.routePolyline=null; }
+  STATE.routeMarkers.forEach(m => m.setMap(null)); STATE.routeMarkers = [];
+  if (STATE._arrowMarkers) { STATE._arrowMarkers.forEach(m => m.setMap(null)); STATE._arrowMarkers = []; }
+  if (STATE.routePolyline) { STATE.routePolyline.setMap(null); STATE.routePolyline = null; }
   if (STATE.mapRoutes) STATE.mapRoutes.setLevel(10);
 }

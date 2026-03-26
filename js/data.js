@@ -89,11 +89,11 @@ const STATE = {
   myMarker: null,
   // 노선 좌표 캐시
   routeCoords: new Map(),
-  routeAnchors: [],
+  roadPolylineCache: new Map(),  // 도로 polyline lazy 캐시
   // 지도 마커 캐시
   homeFromMarker: null, homeToMarker: null,
-  routePolyline: null, routeMarkers: [], snappedMarkers: [],
-  detailPolyline: null, detailMarkers: [], detailSnappedMarkers: [],
+  routePolyline: null, routeMarkers: [],
+  detailPolyline: null, detailPolyline2: null, detailMarkers: [],
   // 노선도
   selectedZone: null,
   selectedRoute: null,
@@ -108,21 +108,15 @@ let STOPS  = [];
 
 async function loadData() {
   try {
-    const [rRes, sRes, aRes] = await Promise.all([
+    const [rRes, sRes] = await Promise.all([
       fetch('data/routes.json'),
       fetch('data/stops.json'),
-      fetch('data/route_anchors.json'),
     ]);
 
-    if (!rRes.ok || !sRes.ok || !aRes.ok) throw new Error('데이터 파일 응답 오류');
+    if (!rRes.ok || !sRes.ok) throw new Error('데이터 파일 응답 오류');
 
-    const rawRoutes = await rRes.json();
-    ROUTES = rawRoutes;
-
-    const rawStops = await sRes.json();
-    STOPS = buildDisplayNames(rawStops);
-
-    STATE.routeAnchors = await aRes.json();
+    ROUTES = await rRes.json();
+    STOPS  = buildDisplayNames(await sRes.json());
   } catch(e) {
     console.warn('데이터 로드 실패', e);
     // 사용자에게 오류 안내 표시

@@ -1,19 +1,21 @@
 'use strict';
 
 // ==================== 경로 검색 ====================
-// 원칙:
-// - 출발지/도착지는 coords에서 정류장 이름으로 찾는다 (좌표 반경 불필요)
-// - 좌표 기반 거리 조건은 환승 허브 탐색(300m)에만 사용
-// - 반대방향 정류장 제외는 routeCoords.js dedup(50m)이 이미 처리
+// BIS 공식 데이터 기반: 정류장 순서가 정확하므로 이름 매칭만으로 충분합니다.
+//
+// 동일명 복수 정류장 처리:
+//   같은 이름의 정류장이 방향별로 2개 있을 수 있습니다 (예: '가덕' 상행/하행).
+//   BIS 데이터에서는 각 노선의 coords에 해당 방향의 정류장만 포함되어 있으므로
+//   이름으로 찾으면 자동으로 올바른 방향의 정류장이 선택됩니다.
 
 const TRANSFER_HUBS = [
-  '서천터미널','장항터미널','한산공용터미널',
-  '서천역','장항읍내','판교','기산','문산',
-  '화양','비인','마산','시초','광암',
+  '서천터미널', '장항터미널', '한산공용터미널',
+  '서천역', '장항읍내', '판교', '기산', '문산',
+  '화양', '비인', '마산', '시초', '광암',
 ];
 
 // coords에서 정류장 이름으로 인덱스 반환
-// 1순위: 정확 매칭 / 2순위: 포함 매칭(짧은 이름 우선)
+// 1순위: 정확 매칭 / 2순위: 포함 매칭 (짧은 이름 우선)
 function findIdxByName(coords, name) {
   if (!name || !coords.length) return -1;
   let idx = coords.findIndex(c => c.name === name);
@@ -25,24 +27,12 @@ function findIdxByName(coords, name) {
   return candidates.length ? candidates[0].i : -1;
 }
 
-// 환승 허브용 좌표 매칭 (300m 이내)
-function findIdxByCoord(coords, lat, lng, radiusM = 300) {
-  let best = -1, bestD = radiusM;
-  coords.forEach((c, i) => {
-    if (!c.lat) return;
-    const d = distM(c.lat, c.lng, lat, lng);
-    if (d < bestD) { bestD = d; best = i; }
-  });
-  return best;
+// 환승 허브 인덱스: 이름으로만 찾음 (BIS 데이터는 정확하므로 좌표 보조 불필요)
+function findHubIdx(coords, hubName) {
+  return findIdxByName(coords, hubName);
 }
 
-// hub 인덱스: 이름 우선, 없으면 좌표 300m
-function findHubIdx(coords, hubName, hLat, hLng) {
-  const byName = findIdxByName(coords, hubName);
-  return byName !== -1 ? byName : findIdxByCoord(coords, hLat, hLng, 300);
-}
-
-// 구간 소요시간 계산
+// 구간 소요시간 계산 (직선거리 기반 추정)
 function segMin(coords, fromIdx, toIdx, routeDist) {
   const fc = coords[fromIdx], tc = coords[toIdx];
   const km = (fc?.lat && tc?.lat)
@@ -58,7 +48,7 @@ function searchDirect(fromName, toName, baseMin, dayType) {
     const coords = getRouteCoords(route);
     if (coords.length < 2) continue;
 
-    const toIdx   = findIdxByName(coords, toName);
+    const toIdx = findIdxByName(coords, toName);
     if (toIdx === -1) continue;
 
     const fromIdx = fromName ? findIdxByName(coords, fromName) : 0;
@@ -86,17 +76,12 @@ function searchTransfer(fromName, toName, baseMin, dayType) {
   const ck = getCountKey(dayType);
 
   for (const hubName of TRANSFER_HUBS) {
-    const hubStop = STOPS.find(s => s.name === hubName)
-                 || STOPS.find(s => s.name.includes(hubName.substring(0, 3)));
-    if (!hubStop) continue;
-    const { lat: hLat, lng: hLng } = hubStop;
-
     // 1구간: from → hub
     const leg1 = ROUTES.filter(r => {
       if (!(r[ck] > 0)) return false;
       const c = getRouteCoords(r);
       if (c.length < 2) return false;
-      const hi = findHubIdx(c, hubName, hLat, hLng);
+      const hi = findHubIdx(c, hubName);
       if (hi === -1) return false;
       const fi = fromName ? findIdxByName(c, fromName) : 0;
       if (fromName && fi === -1) return false;
@@ -108,7 +93,7 @@ function searchTransfer(fromName, toName, baseMin, dayType) {
       if (!(r[ck] > 0)) return false;
       const c = getRouteCoords(r);
       if (c.length < 2) return false;
-      const hi = findHubIdx(c, hubName, hLat, hLng);
+      const hi = findHubIdx(c, hubName);
       if (hi === -1) return false;
       const ti = findIdxByName(c, toName);
       return ti !== -1 && hi < ti;
@@ -118,7 +103,7 @@ function searchTransfer(fromName, toName, baseMin, dayType) {
 
     for (const r2 of leg2) {
       const c2   = getRouteCoords(r2);
-      const r2hi = findHubIdx(c2, hubName, hLat, hLng);
+      const r2hi = findHubIdx(c2, hubName);
       const r2ti = findIdxByName(c2, toName);
       if (r2hi === -1 || r2ti === -1) continue;
 
@@ -128,7 +113,7 @@ function searchTransfer(fromName, toName, baseMin, dayType) {
 
       for (const r1 of leg1) {
         const c1   = getRouteCoords(r1);
-        const r1hi = findHubIdx(c1, hubName, hLat, hLng);
+        const r1hi = findHubIdx(c1, hubName);
         if (r1hi === -1) continue;
         const r1fi = fromName ? findIdxByName(c1, fromName) : 0;
         if (fromName && r1fi === -1) continue;
@@ -142,8 +127,6 @@ function searchTransfer(fromName, toName, baseMin, dayType) {
           for (const dep of r1times) {
             if (dep < baseMin) continue;
             const hubArrMin = dep + leg1min;
-            // 허브 도착이 2구간 출발 5분 전 이내여야 하고
-            // 환승 대기가 60분 이하여야 함
             if (hubArrMin <= needHubBy && bus2dep - hubArrMin <= 60) {
               bestBus1 = { dep, boardMin: dep, hubArrMin };
               break;
@@ -190,14 +173,16 @@ function searchRoutes(fromState, toState, searchTime) {
   const toName   = toState?.name || null;
   if (!toName) return [];
 
-  const all = [...searchDirect(fromName, toName, baseMin, dayType),
-               ...searchTransfer(fromName, toName, baseMin, dayType)];
+  const all = [
+    ...searchDirect(fromName, toName, baseMin, dayType),
+    ...searchTransfer(fromName, toName, baseMin, dayType),
+  ];
 
   all.sort((a, b) => {
     if (a.type !== b.type) {
-      const dw = a.type === 'direct' ? a.boardMin : b.boardMin;
-      const tw = a.type === 'direct' ? b.boardMin : a.boardMin;
-      if (dw - tw > 30) return a.type === 'direct' ? 1 : -1;
+      const gap = (a.type === 'direct' ? a.boardMin : b.boardMin)
+                - (a.type === 'direct' ? b.boardMin : a.boardMin);
+      if (Math.abs(gap) > 30) return a.type === 'direct' ? -1 : 1;
       return a.type === 'direct' ? -1 : 1;
     }
     if (Math.abs(a.boardMin - b.boardMin) > 3) return a.boardMin - b.boardMin;
@@ -213,8 +198,6 @@ function findReturnRoute(toState, fromState, baseMin, dayType) {
   const retToName   = fromState?.isGps ? null : (fromState?.name || null);
   if (!retFromName) return null;
 
-  console.log(`[복귀] ${retFromName} → ${retToName||'종점'}, baseMin=${baseMin}`);
-
   const ck = getCountKey(dayType);
 
   // 직행 복귀
@@ -226,30 +209,23 @@ function findReturnRoute(toState, fromState, baseMin, dayType) {
     if (fi === -1) return false;
     if (retToName) {
       const ti = findIdxByName(c, retToName);
-      if (ti === -1 || fi >= ti) return false;
-      return true;
+      return ti !== -1 && fi < ti;
     }
     return fi < c.length - 1;
   });
 
-  console.log(`[복귀] 직행 후보: ${directs.map(r=>r['번호']).join(', ')||'없음'}`);
-
   if (directs.length) {
-    // 다음 버스 시간이 빠른 순으로 정렬
-    const directsWithNext = directs
+    const withNext = directs
       .map(r => ({ r, next: getNextBusMin(r, baseMin, dayType) }))
       .filter(x => x.next !== null)
       .sort((a, b) => a.next - b.next);
 
-    console.log(`[복귀] nextMin 있는 후보: ${directsWithNext.map(x=>`${x.r['번호']}(${minToTime(x.next)})`).join(', ')||'없음'}`);
-
-    if (directsWithNext.length) {
-      const { r, next: nextMin } = directsWithNext[0];
+    if (withNext.length) {
+      const { r, next: nextMin } = withNext[0];
       const c  = getRouteCoords(r);
       const fi = findIdxByName(c, retFromName);
       const ti = retToName ? findIdxByName(c, retToName) : c.length - 1;
       const mins = segMin(c, fi, ti, r['거리']);
-      console.log(`[복귀] 선택: ${r['번호']}번 ${minToTime(nextMin)} 출발`);
       return {
         type: 'direct', route: r, coords: c,
         nextMin, boardMin: nextMin, arriveMin: nextMin + mins, minutes: mins,
@@ -258,29 +234,22 @@ function findReturnRoute(toState, fromState, baseMin, dayType) {
         fromIdx: fi, toIdx: ti, dayType,
       };
     }
-    console.log('[복귀] 모든 직행 후보 당일 버스 없음');
   }
 
   // 환승 복귀
   for (const hubName of TRANSFER_HUBS) {
-    const hubStop = STOPS.find(s => s.name === hubName)
-                 || STOPS.find(s => s.name.includes(hubName.substring(0, 3)));
-    if (!hubStop) continue;
-    const { lat: hLat, lng: hLng } = hubStop;
-
     const leg1 = ROUTES.filter(r => {
       if (!(r[ck] > 0)) return false;
       const c  = getRouteCoords(r);
       const fi = findIdxByName(c, retFromName);
       if (fi === -1) return false;
-      const hi = findHubIdx(c, hubName, hLat, hLng);
+      const hi = findHubIdx(c, hubName);
       return hi !== -1 && fi < hi;
     });
-
     const leg2 = ROUTES.filter(r => {
       if (!(r[ck] > 0)) return false;
       const c  = getRouteCoords(r);
-      const hi = findHubIdx(c, hubName, hLat, hLng);
+      const hi = findHubIdx(c, hubName);
       if (hi === -1) return false;
       if (retToName) {
         const ti = findIdxByName(c, retToName);
@@ -288,7 +257,6 @@ function findReturnRoute(toState, fromState, baseMin, dayType) {
       }
       return hi < c.length - 1;
     });
-
     if (!leg1.length || !leg2.length) continue;
 
     leg1.sort((a, b) => (b[ck] || 0) - (a[ck] || 0));
@@ -296,8 +264,8 @@ function findReturnRoute(toState, fromState, baseMin, dayType) {
     const r1 = leg1[0], r2 = leg2[0];
     const c1 = getRouteCoords(r1), c2 = getRouteCoords(r2);
     const fi  = findIdxByName(c1, retFromName);
-    const hi1 = findHubIdx(c1, hubName, hLat, hLng);
-    const hi2 = findHubIdx(c2, hubName, hLat, hLng);
+    const hi1 = findHubIdx(c1, hubName);
+    const hi2 = findHubIdx(c2, hubName);
     const ti  = retToName ? findIdxByName(c2, retToName) : c2.length - 1;
     const nextMin = getNextBusMin(r1, baseMin, dayType);
     if (nextMin === null) continue;
