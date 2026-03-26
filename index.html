@@ -282,5 +282,53 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+<!-- Service Worker 등록 -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => {
+        // 새 버전 감지 시 사용자에게 업데이트 안내
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              showUpdateBanner();
+            }
+          });
+        });
+      });
+
+    // 업데이트 후 새로고침 (새 SW가 claim하면 자동 reload)
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) { refreshing = true; location.reload(); }
+    });
+  });
+}
+
+function showUpdateBanner() {
+  const ex = document.getElementById('update-banner');
+  if (ex) return;
+  const el = document.createElement('div');
+  el.id = 'update-banner';
+  el.style.cssText = [
+    'position:fixed', 'bottom:72px', 'left:12px', 'right:12px', 'z-index:9100',
+    'background:#185FA5', 'color:#fff',
+    'font-size:13px', 'line-height:1.5',
+    'padding:12px 14px', 'border-radius:12px',
+    'box-shadow:0 2px 12px rgba(0,0,0,.2)',
+    'display:flex', 'align-items:center', 'gap:10px',
+  ].join(';');
+  el.innerHTML = `
+    <span style="flex:1">🔄 새 버전이 있습니다</span>
+    <button onclick="location.reload()" style="background:#fff;color:#185FA5;border:none;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">업데이트</button>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;font-size:14px;cursor:pointer;padding:0;flex-shrink:0">✕</button>
+  `;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 15000);
+}
+</script>
+
 </body>
 </html>
