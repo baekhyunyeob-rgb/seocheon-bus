@@ -244,3 +244,15 @@ function findStopByName(name){
   if(partial.length>1) return partial.sort((a,b)=>a.name.length-b.name.length)[0];
   return null;
 }
+
+// coords 배열에서 주어진 좌표와 가장 가까운 인덱스 반환
+// radiusM: 허용 반경(미터), 범위 밖이면 -1
+function findIdxByCoord(coords, lat, lng, radiusM = 300) {
+  let best = -1, bestD = Infinity;
+  coords.forEach((c, i) => {
+    if (!c.lat) return;
+    const d = distM(c.lat, c.lng, lat, lng);
+    if (d < bestD && d <= radiusM) { bestD = d; best = i; }
+  });
+  return best;
+}
