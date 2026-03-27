@@ -420,14 +420,20 @@ input[type="time"].custom-time {
   padding: 14px 14px 12px;
   border-bottom: 0.5px solid var(--border);
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 .tt-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
 .tt-search-results {
-  margin-top: 6px;
+  position: absolute;
+  left: 14px; right: 14px;
+  top: calc(100% - 6px);
+  margin-top: 0;
   border-radius: 8px; border: 0.5px solid var(--border);
   background: var(--surface);
-  max-height: 160px; overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0,0,0,.06);
+  max-height: 200px; overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,.10);
+  z-index: 100;
 }
 .tt-result-item {
   padding: 10px 14px;
