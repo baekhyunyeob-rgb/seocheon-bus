@@ -80,6 +80,16 @@ function showScreen(name, pushHistory = true) {
       STATE.routesBackScreen = null;
       if (STATE.searchStopMarker) { STATE.searchStopMarker.setMap(null); STATE.searchStopMarker = null; }
       STATE.timetableSearchStop = null;
+
+      // ── 핵심 버그 수정 ──────────────────────────────────────────────
+      // initRoutesScreen()은 DOMContentLoaded 시점(display:none 상태)에서
+      // 호출되므로, .routes-list의 scrollHeight가 0으로 고정된다.
+      // 이후 display:flex로 전환해도 iOS Safari / Android Chrome에서
+      // scroll 컨테이너가 재계산되지 않아 모바일에서 일부 노선만 보이는 버그 발생.
+      // → 화면이 실제로 visible해진 후(display:flex) renderRouteList를 다시 호출.
+      // requestAnimationFrame을 사용해 브라우저 레이아웃 확정 이후에 실행.
+      // ─────────────────────────────────────────────────────────────────
+      requestAnimationFrame(() => renderRouteList(STATE.selectedZone));
     }
     STATE._fromTimetable = false;
     setTimeout(updateRoutesBackBtn, 0);

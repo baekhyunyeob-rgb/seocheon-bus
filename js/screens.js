@@ -370,8 +370,12 @@ function goBackFromRoutes() {
 
 // ==================== 버스노선도 화면 ====================
 function initRoutesScreen() {
+  // zone-legend(권역 배지)만 미리 렌더링.
+  // renderRouteList는 showScreen('routes') 호출 시(display:flex 확정 후)
+  // requestAnimationFrame 안에서 실행되므로 여기서는 호출하지 않는다.
+  // (display:none 상태에서 renderRouteList를 호출하면 .routes-list의
+  //  scrollHeight가 0으로 고정되어 모바일에서 스크롤이 안 되는 버그 발생)
   renderZoneLegend();
-  renderRouteList(null);
 }
 
 function renderZoneLegend() {
