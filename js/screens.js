@@ -133,6 +133,18 @@ function selectPlace(target, place) {
 }
 
 // ==================== 버스시간표 화면 ====================
+function _positionStopSearchResults() {
+  const input = document.getElementById('stop-search-input');
+  const resEl = document.getElementById('stop-search-results');
+  if (!input || !resEl) return;
+  const rect = input.getBoundingClientRect();
+  resEl.style.position = 'fixed';
+  resEl.style.top = (rect.bottom + 4) + 'px';
+  resEl.style.left = rect.left + 'px';
+  resEl.style.width = rect.width + 'px';
+  resEl.style.zIndex = '9999';
+}
+
 function onStopSearchInput(val) {
   const resEl = document.getElementById('stop-search-results');
   if (!val.trim()) { resEl.style.display='none'; return; }
@@ -146,6 +158,7 @@ function onStopSearchInput(val) {
       ${disp}
     </div>`;
   }).join('');
+  _positionStopSearchResults();
   resEl.style.display='block';
 }
 
