@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>서천군 버스 노선도</title>
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&libraries=services"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: #0f1117;
+    color: #e8eaf0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #header {
+    background: linear-gradient(135deg, #1a1d2e 0%, #12151f 100%);
+    border-bottom: 1px solid #2a2d3e;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+
+  #header h1 {
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.3px;
+  }
+
+  #header p {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+
+  .logo-badge {
+    width: 38px;
+    height: 38px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  #layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  #sidebar {
+    width: 280px;
+    background: #1a1d2e;
+    border-right: 1px solid #2a2d3e;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  #search-box {
+    padding: 14px;
+    border-bottom: 1px solid #2a2d3e;
+  }
+
+  #search-input {
+    width: 100%;
+    background: #0f1117;
+    border: 1px solid #2a2d3e;
+    border-radius: 8px;
+    padding: 9px 12px;
+    color: #e8eaf0;
+    font-size: 13px;
+    font-family: 'Noto Sans KR', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #search-input:focus { border-color: #3b82f6; }
+  #search-input::placeholder { color: #4b5563; }
+
+  #route-filter {
+    padding: 12px 14px;
+    border-bottom: 1px solid #2a2d3e;
+  }
+
+  #route-filter h3 {
+    font-size: 11px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+
+  .route-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .route-chip {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    transition: all 0.2s;
+    color: #fff;
+  }
+  .route-chip.active { opacity: 1; }
+  .route-chip:not(.active) { opacity: 0.4; }
+  .route-chip:hover { opacity: 0.85; }
+
+  #stop-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  #stop-list::-webkit-scrollbar { width: 4px; }
+  #stop-list::-webkit-scrollbar-track { background: transparent; }
+  #stop-list::-webkit-scrollbar-thumb { background: #2a2d3e; border-radius: 2px; }
+
+  .stop-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .stop-item:hover { background: #0f1117; }
+  .stop-item.active { background: #0f1117; }
+
+  .stop-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .stop-name {
+    font-size: 13px;
+    color: #d1d5db;
+    font-weight: 400;
+  }
+  .stop-item.active .stop-name { color: #fff; font-weight: 500; }
+
+  .stop-routes {
+    margin-left: auto;
+    display: flex;
+    gap: 3px;
+  }
+
+  .route-tag {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+
+  #map-container {
+    flex: 1;
+    position: relative;
+  }
+
+  #map {
+    width: 100%;
+    height: 100%;
+  }
+
+  #info-panel {
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    background: rgba(26, 29, 46, 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid #2a2d3e;
+    border-radius: 14px;
+    padding: 18px 20px;
+    min-width: 240px;
+    max-width: 300px;
+    display: none;
+    z-index: 10;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  #info-panel.visible { display: block; }
+
+  #info-panel h2 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  #info-panel .info-sub {
+    font-size: 11px;
+    color: #6b7280;
+    margin-bottom: 14px;
+  }
+
+  .info-routes-label {
+    font-size: 11px;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+  }
+
+  .info-route-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .info-route-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  #close-info {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px;
+  }
+  #close-info:hover { color: #d1d5db; }
+
+  #overlay-toggle {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+  }
+
+  .map-btn {
+    background: rgba(26, 29, 46, 0.92);
+    border: 1px solid #2a2d3e;
+    color: #d1d5db;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    transition: all 0.2s;
+    backdrop-filter: blur(8px);
+  }
+  .map-btn:hover { background: rgba(59,130,246,0.2); border-color: #3b82f6; color: #fff; }
+  .map-btn.active { background: rgba(59,130,246,0.3); border-color: #3b82f6; color: #3b82f6; }
+
+  .stats-bar {
+    display: flex;
+    gap: 16px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #2a2d3e;
+    background: #12151f;
+  }
+  .stat { text-align: center; }
+  .stat-num { font-size: 16px; font-weight: 700; color: #3b82f6; }
+  .stat-label { font-size: 10px; color: #6b7280; }
+
+  .section-header {
+    padding: 10px 14px 4px;
+    font-size: 11px;
+    color: #4b5563;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="logo-badge">🚌</div>
+  <div>
+    <h1>서천군 버스 노선도</h1>
+    <p>농어촌버스 인터랙티브 지도 · seocheonbus.com 기준</p>
+  </div>
+</div>
+
+<div id="layout">
+  <div id="sidebar">
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-num" id="stat-stops">0</div>
+        <div class="stat-label">정류장</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="stat-routes">0</div>
+        <div class="stat-label">노선</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num" id="stat-visible">0</div>
+        <div class="stat-label">표시중</div>
+      </div>
+    </div>
+
+    <div id="search-box">
+      <input type="text" id="search-input" placeholder="🔍  정류장 검색..." oninput="filterStops()">
+    </div>
+
+    <div id="route-filter">
+      <h3>노선 필터</h3>
+      <div class="route-chips" id="route-chips"></div>
+    </div>
+
+    <div class="section-header">정류장 목록</div>
+    <div id="stop-list"></div>
+  </div>
+
+  <div id="map-container">
+    <div id="map"></div>
+    <div id="overlay-toggle">
+      <button class="map-btn" onclick="toggleMapType()">위성지도</button>
+      <button class="map-btn" onclick="fitAll()">전체보기</button>
+    </div>
+    <div id="info-panel">
+      <button id="close-info" onclick="closeInfo()">✕</button>
+      <h2 id="info-name">정류장명</h2>
+      <div class="info-sub" id="info-addr">주소 정보</div>
+      <div class="info-routes-label">경유 노선</div>
+      <div class="info-route-list" id="info-routes"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============================================
+// 노선 정의 (이미지 색상 기반)
+// =============================================
+const ROUTES = {
+  'R1':  { name: '1번 (서천↔미산)', color: '#ef4444', stops: ['서천터미널','비인면사무소','한산터미널','문산정류소','마산면사무소','옥산면사무소','미산면사무소·내평리'] },
+  'R2':  { name: '2번 (서천↔장항)', color: '#3b82f6', stops: ['서천터미널','장항터미널','마서면사무소','비인면사무소','서면','갈목','마하리총점'] },
+  'R3':  { name: '3번 (서천↔판교)', color: '#10b981', stops: ['서천터미널','십동리','판교삼거리·기무골','시초면사무소','종천면사무소','판교면사무소','군산터미널'] },
+  'R4':  { name: '4번 (장항↔군산)', color: '#f59e0b', stops: ['장항터미널','서천터미널','신흥아파트','군산터미널'] },
+  'R5':  { name: '5번 (한산↔홍산)', color: '#8b5cf6', stops: ['한산터미널','문산정류소','홍산면사무소'] },
+  'R6':  { name: '6번 (기산↔입포)', color: '#06b6d4', stops: ['서천터미널','기산면사무소','문산정류소','입포하나로마트'] },
+};
+
+// =============================================
+// 주요 정류장 데이터 (노선도 이미지 분석 + 실제 좌표)
+// =============================================
+const STOPS = [
+  // 핵심 터미널/거점
+  { id: 's1',  name: '서천터미널',          lat: 36.0797, lng: 126.6912, routes: ['R1','R2','R3','R4','R6'], type: 'terminal' },
+  { id: 's2',  name: '장항터미널',          lat: 36.0027, lng: 126.7014, routes: ['R2','R4'], type: 'terminal' },
+  { id: 's3',  name: '한산터미널',          lat: 36.1180, lng: 126.7820, routes: ['R1','R5'], type: 'terminal' },
+  { id: 's4',  name: '군산터미널',          lat: 35.9790, lng: 126.7360, routes: ['R3','R4'], type: 'terminal' },
+  { id: 's5',  name: '신흥아파트',          lat: 36.0390, lng: 126.7100, routes: ['R4'], type: 'stop' },
+
+  // 면사무소 거점
+  { id: 's6',  name: '비인면사무소',        lat: 36.0560, lng: 126.6220, routes: ['R1','R2'], type: 'major' },
+  { id: 's7',  name: '마서면사무소',        lat: 36.0450, lng: 126.6680, routes: ['R2'], type: 'major' },
+  { id: 's8',  name: '마산면사무소',        lat: 36.0980, lng: 126.8330, routes: ['R1'], type: 'major' },
+  { id: 's9',  name: '옥산면사무소',        lat: 36.1650, lng: 126.8100, routes: ['R1'], type: 'major' },
+  { id: 's10', name: '미산면사무소·내평리', lat: 36.2350, lng: 126.7480, routes: ['R1'], type: 'major' },
+  { id: 's11', name: '문산정류소',          lat: 36.1320, lng: 126.8530, routes: ['R1','R5','R6'], type: 'major' },
+  { id: 's12', name: '기산면사무소',        lat: 36.1450, lng: 126.9200, routes: ['R6'], type: 'major' },
+  { id: 's13', name: '화양면사무소',        lat: 36.0100, lng: 126.8400, routes: ['R1'], type: 'major' },
+  { id: 's14', name: '종천면사무소',        lat: 36.0530, lng: 126.7850, routes: ['R3'], type: 'major' },
+  { id: 's15', name: '시초면사무소',        lat: 36.0710, lng: 126.8430, routes: ['R3'], type: 'major' },
+  { id: 's16', name: '판교면사무소',        lat: 36.0530, lng: 126.9050, routes: ['R3'], type: 'major' },
+  { id: 's17', name: '홍산면사무소',        lat: 36.2100, lng: 126.8750, routes: ['R5'], type: 'major' },
+
+  // 주요 경유 정류장
+  { id: 's18', name: '십동리',             lat: 36.1050, lng: 126.7580, routes: ['R1','R3'], type: 'stop' },
+  { id: 's19', name: '판교삼거리·기무골',  lat: 36.0950, lng: 126.7720, routes: ['R3'], type: 'stop' },
+  { id: 's20', name: '갈목',              lat: 36.0240, lng: 126.6450, routes: ['R2'], type: 'stop' },
+  { id: 's21', name: '마하리총점',         lat: 36.0100, lng: 126.5880, routes: ['R2'], type: 'stop' },
+  { id: 's22', name: '입포하나로마트',     lat: 36.1980, lng: 126.9700, routes: ['R6'], type: 'stop' },
+
+  // 읍내/북부
+  { id: 's23', name: '서면',              lat: 36.0640, lng: 126.6550, routes: ['R2'], type: 'stop' },
+  { id: 's24', name: '원하리',            lat: 36.0230, lng: 126.6820, routes: ['R2'], type: 'stop' },
+  { id: 's25', name: '장항시내',          lat: 36.0100, lng: 126.7080, routes: ['R2','R4'], type: 'stop' },
+  { id: 's26', name: '장항공단',          lat: 36.0230, lng: 126.7190, routes: ['R4'], type: 'stop' },
+  { id: 's27', name: '남산',             lat: 36.0610, lng: 126.7210, routes: ['R1','R2'], type: 'stop' },
+
+  // 중앙부
+  { id: 's28', name: '서천읍내',          lat: 36.0760, lng: 126.6970, routes: ['R1','R2','R3'], type: 'stop' },
+  { id: 's29', name: '군사공원단지',      lat: 36.0320, lng: 126.7530, routes: ['R3'], type: 'stop' },
+  { id: 's30', name: '신산리',           lat: 36.1180, lng: 126.7600, routes: ['R1'], type: 'stop' },
+  { id: 's31', name: '한산면소재지',      lat: 36.1250, lng: 126.7790, routes: ['R1','R5'], type: 'stop' },
+  { id: 's32', name: '지현리',           lat: 36.0860, lng: 126.8100, routes: ['R3'], type: 'stop' },
+  { id: 's33', name: '태양리',           lat: 36.1680, lng: 126.8420, routes: ['R1','R5'], type: 'stop' },
+  { id: 's34', name: '문산리',           lat: 36.1350, lng: 126.8490, routes: ['R1','R5','R6'], type: 'stop' },
+  { id: 's35', name: '마산시내',         lat: 36.0950, lng: 126.8300, routes: ['R1'], type: 'stop' },
+  { id: 's36', name: '판교시내',         lat: 36.0540, lng: 126.9030, routes: ['R3'], type: 'stop' },
+  { id: 's37', name: '군산공항단지',     lat: 35.9960, lng: 126.7510, routes: ['R3','R4'], type: 'stop' },
+  { id: 's38', name: '비인시내',         lat: 36.0590, lng: 126.6190, routes: ['R1','R2'], type: 'stop' },
+  { id: 's39', name: '서천중학교',       lat: 36.0740, lng: 126.6880, routes: ['R2','R3'], type: 'stop' },
+  { id: 's40', name: '장항역',          lat: 36.0060, lng: 126.6960, routes: ['R2','R4'], type: 'major' },
+];
+
+// =============================================
+// 앱 상태
+// =============================================
+let map, markers = {}, polylines = [], clusterer;
+let activeRoutes = new Set(Object.keys(ROUTES));
+let selectedStop = null;
+let mapTypeId = 'ROADMAP';
+let searchQuery = '';
+
+// =============================================
+// 지도 초기화
+// =============================================
+function initMap() {
+  const container = document.getElementById('map');
+  map = new kakao.maps.Map(container, {
+    center: new kakao.maps.LatLng(36.0900, 126.7500),
+    level: 9
+  });
+
+  // 마커 생성
+  STOPS.forEach(stop => {
+    const marker = createStopMarker(stop);
+    markers[stop.id] = marker;
+  });
+
+  // 노선 폴리라인
+  drawRoutes();
+
+  // 사이드바 렌더링
+  renderRoutChips();
+  renderStopList();
+  updateStats();
+}
+
+function createStopMarker(stop) {
+  const isTerminal = stop.type === 'terminal';
+  const isMajor = stop.type === 'major';
+
+  // 마커 색상: 첫 번째 노선 색상 사용
+  const color = ROUTES[stop.routes[0]]?.color || '#6b7280';
+
+  const size = isTerminal ? 14 : isMajor ? 10 : 7;
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${size*2+4}" height="${size*2+4}">
+      <circle cx="${size+2}" cy="${size+2}" r="${size}" fill="${color}" stroke="white" stroke-width="${isTerminal ? 2.5 : 1.5}" opacity="0.9"/>
+      ${isTerminal ? `<circle cx="${size+2}" cy="${size+2}" r="${size*0.45}" fill="white"/>` : ''}
+    </svg>
+  `.trim();
+
+  const markerImage = new kakao.maps.MarkerImage(
+    'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+    new kakao.maps.Size(size*2+4, size*2+4),
+    { offset: new kakao.maps.Point(size+2, size+2) }
+  );
+
+  const marker = new kakao.maps.Marker({
+    position: new kakao.maps.LatLng(stop.lat, stop.lng),
+    map: map,
+    image: markerImage,
+    title: stop.name,
+    zIndex: isTerminal ? 5 : isMajor ? 3 : 1
+  });
+
+  kakao.maps.event.addListener(marker, 'click', () => selectStop(stop));
+
+  return marker;
+}
+
+function drawRoutes() {
+  // 기존 폴리라인 제거
+  polylines.forEach(p => p.setMap(null));
+  polylines = [];
+
+  Object.entries(ROUTES).forEach(([routeId, route]) => {
+    if (!activeRoutes.has(routeId)) return;
+
+    const stopObjs = route.stops.map(name => STOPS.find(s => s.name === name)).filter(Boolean);
+    if (stopObjs.length < 2) return;
+
+    const path = stopObjs.map(s => new kakao.maps.LatLng(s.lat, s.lng));
+    const polyline = new kakao.maps.Polyline({
+      path,
+      strokeWeight: 3,
+      strokeColor: route.color,
+      strokeOpacity: 0.75,
+      strokeStyle: 'solid',
+      map: map
+    });
+    polylines.push(polyline);
+  });
+}
+
+// =============================================
+// UI 렌더링
+// =============================================
+function renderRoutChips() {
+  const container = document.getElementById('route-chips');
+  container.innerHTML = '';
+  Object.entries(ROUTES).forEach(([id, route]) => {
+    const chip = document.createElement('div');
+    chip.className = 'route-chip' + (activeRoutes.has(id) ? ' active' : '');
+    chip.style.background = route.color + '33';
+    chip.style.borderColor = activeRoutes.has(id) ? route.color : 'transparent';
+    chip.style.color = route.color;
+    chip.textContent = id.replace('R', '') + '번';
+    chip.onclick = () => toggleRoute(id);
+    container.appendChild(chip);
+  });
+}
+
+function renderStopList() {
+  const container = document.getElementById('stop-list');
+  container.innerHTML = '';
+
+  const filtered = STOPS.filter(stop => {
+    const matchSearch = !searchQuery || stop.name.includes(searchQuery);
+    const matchRoute = stop.routes.some(r => activeRoutes.has(r));
+    return matchSearch && matchRoute;
+  });
+
+  filtered.forEach(stop => {
+    const item = document.createElement('div');
+    item.className = 'stop-item' + (selectedStop?.id === stop.id ? ' active' : '');
+    item.id = 'list-' + stop.id;
+
+    const color = ROUTES[stop.routes[0]]?.color || '#6b7280';
+    item.style.borderLeftColor = selectedStop?.id === stop.id ? color : 'transparent';
+
+    const dot = document.createElement('div');
+    dot.className = 'stop-dot';
+    dot.style.background = color;
+
+    const name = document.createElement('div');
+    name.className = 'stop-name';
+    name.textContent = stop.name;
+
+    const tags = document.createElement('div');
+    tags.className = 'stop-routes';
+    stop.routes.slice(0, 3).forEach(r => {
+      const tag = document.createElement('div');
+      tag.className = 'route-tag';
+      tag.style.background = ROUTES[r]?.color || '#6b7280';
+      tag.title = ROUTES[r]?.name || r;
+      tags.appendChild(tag);
+    });
+
+    item.appendChild(dot);
+    item.appendChild(name);
+    item.appendChild(tags);
+    item.onclick = () => { selectStop(stop); panToStop(stop); };
+    container.appendChild(item);
+  });
+
+  document.getElementById('stat-visible').textContent = filtered.length;
+}
+
+function updateStats() {
+  document.getElementById('stat-stops').textContent = STOPS.length;
+  document.getElementById('stat-routes').textContent = Object.keys(ROUTES).length;
+  document.getElementById('stat-visible').textContent = STOPS.filter(s => s.routes.some(r => activeRoutes.has(r))).length;
+}
+
+// =============================================
+// 인터랙션
+// =============================================
+function toggleRoute(routeId) {
+  if (activeRoutes.has(routeId)) {
+    if (activeRoutes.size === 1) return; // 최소 1개 유지
+    activeRoutes.delete(routeId);
+  } else {
+    activeRoutes.add(routeId);
+  }
+
+  // 마커 가시성 업데이트
+  STOPS.forEach(stop => {
+    const visible = stop.routes.some(r => activeRoutes.has(r));
+    markers[stop.id]?.setVisible(visible);
+  });
+
+  drawRoutes();
+  renderRoutChips();
+  renderStopList();
+  updateStats();
+}
+
+function selectStop(stop) {
+  selectedStop = stop;
+
+  // 패널 표시
+  document.getElementById('info-name').textContent = stop.name;
+  document.getElementById('info-addr').textContent = `위도 ${stop.lat.toFixed(4)} / 경도 ${stop.lng.toFixed(4)}`;
+
+  const routeList = document.getElementById('info-routes');
+  routeList.innerHTML = '';
+  stop.routes.forEach(r => {
+    const route = ROUTES[r];
+    if (!route) return;
+    const badge = document.createElement('div');
+    badge.className = 'info-route-badge';
+    badge.style.background = route.color + '33';
+    badge.style.color = route.color;
+    badge.style.border = `1px solid ${route.color}55`;
+    badge.textContent = route.name;
+    routeList.appendChild(badge);
+  });
+
+  document.getElementById('info-panel').classList.add('visible');
+
+  // 사이드바 항목 하이라이트
+  renderStopList();
+  const el = document.getElementById('list-' + stop.id);
+  el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function panToStop(stop) {
+  map.setCenter(new kakao.maps.LatLng(stop.lat, stop.lng));
+  map.setLevel(7);
+}
+
+function closeInfo() {
+  document.getElementById('info-panel').classList.remove('visible');
+  selectedStop = null;
+  renderStopList();
+}
+
+function filterStops() {
+  searchQuery = document.getElementById('search-input').value.trim();
+  renderStopList();
+}
+
+function fitAll() {
+  const bounds = new kakao.maps.LatLngBounds();
+  STOPS.forEach(s => bounds.extend(new kakao.maps.LatLng(s.lat, s.lng)));
+  map.setBounds(bounds);
+}
+
+function toggleMapType() {
+  const btn = event.currentTarget;
+  if (mapTypeId === 'ROADMAP') {
+    map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+    mapTypeId = 'HYBRID';
+    btn.classList.add('active');
+    btn.textContent = '일반지도';
+  } else {
+    map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
+    mapTypeId = 'ROADMAP';
+    btn.classList.remove('active');
+    btn.textContent = '위성지도';
+  }
+}
+
+// 지도 클릭 시 패널 닫기
+kakao.maps.event.addListener ? '' : '';
+window.addEventListener('load', () => {
+  initMap();
+  setTimeout(() => {
+    if (map) {
+      kakao.maps.event.addListener(map, 'click', () => closeInfo());
+    }
+  }, 500);
+});
+</script>
+</body>
+</html>
