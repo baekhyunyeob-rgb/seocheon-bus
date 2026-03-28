@@ -17,9 +17,14 @@
   #main { display:flex; flex:1; overflow:hidden; }
 
   #canvas-wrap {
-    flex:1; overflow:auto; background:#0a0c14; cursor:crosshair;
-    display:flex; align-items:flex-start; justify-content:flex-start;
+    flex:1; overflow:scroll; background:#0a0c14; cursor:crosshair;
+    display:block;
+    scrollbar-width:thin; scrollbar-color:#2a2d3e #0a0c14;
   }
+  #canvas-wrap::-webkit-scrollbar { width:10px; height:10px; }
+  #canvas-wrap::-webkit-scrollbar-track { background:#0a0c14; }
+  #canvas-wrap::-webkit-scrollbar-thumb { background:#2a2d3e; border-radius:4px; }
+  #canvas-wrap::-webkit-scrollbar-corner { background:#0a0c14; }
 
   #canvas { display:block; }
 
@@ -196,6 +201,31 @@ function redraw() {
   });
 }
 
+// 드래그 스크롤
+let isDragging = false, dragStartX, dragStartY, scrollStartX, scrollStartY;
+const wrap = document.getElementById('canvas-wrap');
+
+canvas.addEventListener('mousedown', e => {
+  isDragging = true;
+  dragStartX = e.clientX; dragStartY = e.clientY;
+  scrollStartX = wrap.scrollLeft; scrollStartY = wrap.scrollTop;
+  canvas.style.cursor = 'grabbing';
+});
+window.addEventListener('mouseup', e => {
+  if (!isDragging) return;
+  const dx = Math.abs(e.clientX - dragStartX);
+  const dy = Math.abs(e.clientY - dragStartY);
+  isDragging = false;
+  canvas.style.cursor = 'crosshair';
+  // 거의 안 움직였으면 클릭으로 처리 (canvas click 이벤트가 자연 발생)
+  if (dx > 5 || dy > 5) e.stopImmediatePropagation();
+});
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  wrap.scrollLeft = scrollStartX - (e.clientX - dragStartX);
+  wrap.scrollTop  = scrollStartY - (e.clientY - dragStartY);
+});
+
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
   const x = Math.round((e.clientX - rect.left) / scale);
@@ -205,6 +235,9 @@ canvas.addEventListener('mousemove', e => {
 
 canvas.addEventListener('click', e => {
   if (!img) return;
+  const dx = Math.abs(e.clientX - dragStartX);
+  const dy = Math.abs(e.clientY - dragStartY);
+  if (dx > 5 || dy > 5) return; // 드래그였으면 무시
   const rect = canvas.getBoundingClientRect();
   const x = Math.round((e.clientX - rect.left) / scale);
   const y = Math.round((e.clientY - rect.top) / scale);
