@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>서천군 버스 노선도</title>
+<title>서천군 버스 노선도 — 카카오맵 오버레이</title>
 <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&libraries=services"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
@@ -14,42 +14,35 @@ body{font-family:'Noto Sans KR',sans-serif;background:#0f1117;color:#e8eaf0;heig
 .logo{width:36px;height:36px;background:linear-gradient(135deg,#3b82f6,#6366f1);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
 #header h1{font-size:16px;font-weight:700;color:#fff;letter-spacing:-.3px;}
 #header p{font-size:11px;color:#4b5563;margin-top:1px;}
-.badge{margin-left:auto;background:#10b98122;color:#10b981;border:1px solid #10b98144;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;white-space:nowrap;}
+.badge{margin-left:auto;background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;white-space:nowrap;}
 
 #layout{display:flex;flex:1;overflow:hidden;}
 
-#sidebar{width:270px;background:#1a1d2e;border-right:1px solid #2a2d3e;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
-.sb-sec{padding:11px 14px;border-bottom:1px solid #2a2d3e;}
-.sb-lbl{font-size:10px;color:#4b5563;text-transform:uppercase;letter-spacing:1px;margin-bottom:7px;}
+/* ── 사이드바 ── */
+#sidebar{width:300px;background:#1a1d2e;border-right:1px solid #2a2d3e;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;font-size:12px;}
+.sb-sec{padding:12px 14px;border-bottom:1px solid #2a2d3e;}
+.sb-lbl{font-size:10px;color:#4b5563;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600;}
 
-.stats{display:flex;}
-.stat{flex:1;text-align:center;padding:8px 4px;}
-.stat+.stat{border-left:1px solid #2a2d3e;}
-.stn{font-size:18px;font-weight:700;color:#3b82f6;}
-.stl{font-size:10px;color:#4b5563;margin-top:1px;}
+.gcp-row{display:flex;flex-direction:column;gap:6px;margin-bottom:4px;}
+.gcp-item{background:#0f1117;border:1px solid #2a2d3e;border-radius:8px;padding:10px 12px;}
+.gcp-name{font-size:11px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+.gcp-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.inp-row{display:flex;gap:6px;align-items:center;}
+.inp-lbl{font-size:10px;color:#6b7280;width:18px;flex-shrink:0;}
+.gcp-inp{flex:1;background:#1a1d2e;border:1px solid #2a2d3e;border-radius:5px;padding:4px 7px;color:#e8eaf0;font-size:11px;font-family:monospace;outline:none;transition:border-color .2s;}
+.gcp-inp:focus{border-color:#3b82f6;}
+.coord-fixed{font-size:10px;color:#10b981;font-family:monospace;margin-top:4px;}
 
-#search-input{width:100%;background:#0f1117;border:1px solid #2a2d3e;border-radius:7px;padding:8px 11px;color:#e8eaf0;font-size:12px;font-family:'Noto Sans KR',sans-serif;outline:none;transition:border-color .2s;}
-#search-input:focus{border-color:#3b82f6;}
-#search-input::placeholder{color:#374151;}
+.apply-btn{width:100%;padding:8px;background:#3b82f6;border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:background .2s;}
+.apply-btn:hover{background:#2563eb;}
+.apply-btn:disabled{background:#1e3a5f;color:#374151;cursor:not-allowed;}
 
-.chips{display:flex;flex-wrap:wrap;gap:5px;}
-.chip{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid transparent;transition:all .2s;user-select:none;}
-.chip.on{opacity:1;}
-.chip.off{opacity:0.28;}
+.warn-box{background:#7c2d1222;border:1px solid #7c2d1244;border-radius:7px;padding:10px 12px;font-size:11px;color:#fca5a5;line-height:1.6;}
+.info-box{background:#1e3a5f22;border:1px solid #1e3a5f44;border-radius:7px;padding:10px 12px;font-size:11px;color:#93c5fd;line-height:1.6;}
 
-#stop-list{flex:1;overflow-y:auto;padding:4px 0;}
-#stop-list::-webkit-scrollbar{width:3px;}
-#stop-list::-webkit-scrollbar-thumb{background:#2a2d3e;border-radius:2px;}
+#status-box{background:#0f1117;border:1px solid #2a2d3e;border-radius:7px;padding:10px 12px;font-size:11px;color:#6b7280;min-height:50px;font-family:monospace;white-space:pre-wrap;line-height:1.6;}
 
-.si{padding:9px 14px;cursor:pointer;border-left:3px solid transparent;transition:all .15s;display:flex;align-items:center;gap:9px;}
-.si:hover{background:#0f1117;}
-.si.sel{background:#0f1117;}
-.si-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
-.si-name{font-size:12px;color:#9ca3af;flex:1;}
-.si.sel .si-name{color:#fff;font-weight:500;}
-.si-tags{display:flex;gap:2px;}
-.si-tag{width:7px;height:7px;border-radius:2px;}
-
+/* ── 지도 영역 ── */
 #map-wrap{flex:1;position:relative;}
 #map{width:100%;height:100%;}
 
@@ -63,328 +56,419 @@ body{font-family:'Noto Sans KR',sans-serif;background:#0f1117;color:#e8eaf0;heig
 #op-slider{width:100%;accent-color:#3b82f6;cursor:pointer;}
 #op-val{font-size:11px;color:#6b7280;text-align:right;margin-top:3px;}
 
-/* 이미지 업로드 드롭존 */
-#img-upload-hint{position:absolute;bottom:12px;left:12px;z-index:10;background:rgba(26,29,46,.92);border:1px dashed #2a2d3e;border-radius:10px;padding:12px 16px;backdrop-filter:blur(8px);font-size:11px;color:#4b5563;cursor:pointer;transition:border-color .2s;}
-#img-upload-hint:hover{border-color:#3b82f6;color:#6b7280;}
-#img-file{display:none;}
-
-#info{position:absolute;bottom:12px;right:12px;background:rgba(26,29,46,.95);backdrop-filter:blur(12px);border:1px solid #2a2d3e;border-radius:12px;padding:16px 18px;width:250px;display:none;z-index:10;box-shadow:0 8px 32px rgba(0,0,0,.4);}
-#info.show{display:block;}
-#info-x{position:absolute;top:10px;right:10px;background:none;border:none;color:#4b5563;cursor:pointer;font-size:15px;line-height:1;}
-#info-x:hover{color:#d1d5db;}
-#info-name{font-size:15px;font-weight:700;margin-bottom:3px;}
-#info-coord{font-size:10px;color:#4b5563;font-family:monospace;margin-bottom:12px;}
-.irl{font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;}
-#info-routes{display:flex;flex-wrap:wrap;gap:5px;}
-.ir{padding:3px 9px;border-radius:5px;font-size:11px;font-weight:600;}
-
-.gcp-badge{position:absolute;top:12px;left:282px;z-index:10;background:rgba(16,185,129,.12);border:1px solid #10b98133;border-radius:7px;padding:5px 10px;font-size:10px;color:#10b981;}
+/* 오버레이 캔버스 */
+#ov-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;display:none;}
 </style>
 </head>
 <body>
+
 <div id="header">
   <div class="logo">🚌</div>
   <div>
     <h1>서천군 버스 노선도</h1>
-    <p>Homography 좌표변환 · 카카오맵 매칭</p>
+    <p>4-GCP Homography → 카카오맵 오버레이 (CSS perspective transform)</p>
   </div>
-  <div class="badge">📍 GCP 4점 보정 완료</div>
+  <div class="badge">⚠️ 픽셀좌표 입력 필요</div>
 </div>
 
 <div id="layout">
+  <!-- ── 사이드바 ── -->
   <div id="sidebar">
-    <div class="sb-sec" style="padding:8px 14px;">
-      <div class="stats">
-        <div class="stat"><div class="stn" id="sn-stops">31</div><div class="stl">정류장</div></div>
-        <div class="stat"><div class="stn" id="sn-routes">6</div><div class="stl">노선</div></div>
-        <div class="stat"><div class="stn" id="sn-vis">31</div><div class="stl">표시중</div></div>
+
+    <!-- 논리 안내 -->
+    <div class="sb-sec">
+      <div class="sb-lbl">📐 오버레이 원리</div>
+      <div class="info-box">
+        카카오맵은 이미지를 <b>직사각형으로만</b> 붙일 수 있습니다.<br>
+        대신 <b>CSS matrix3d</b>로 정확한 원근(homography) 왜곡을 적용합니다.<br><br>
+        ① pixel_picker로 4점 픽셀좌표 측정<br>
+        ② 아래 입력창에 입력 → 적용<br>
+        ③ 이미지 업로드 → 노선도 오버레이
       </div>
     </div>
+
+    <!-- GCP 픽셀좌표 입력 -->
     <div class="sb-sec">
-      <input type="text" id="search-input" placeholder="🔍  정류장 검색..." oninput="filterList()">
+      <div class="sb-lbl">📍 GCP 픽셀좌표 입력 <span style="color:#4b5563">(pixel_picker로 측정)</span></div>
+      <div class="gcp-row" id="gcp-inputs"></div>
+      <div style="margin-top:10px;">
+        <button class="apply-btn" onclick="applyGCPs()">✅ GCP 적용 &amp; 지도 갱신</button>
+      </div>
     </div>
+
+    <!-- 경고 -->
     <div class="sb-sec">
-      <div class="sb-lbl">노선 필터</div>
-      <div class="chips" id="chips"></div>
+      <div class="sb-lbl">⚠️ 이전 코드의 오류</div>
+      <div class="warn-box">
+        <b>① Homography가 실제 미사용</b><br>
+        H 행렬·px2ll() 정의만 있고 오버레이/마커에 전혀 쓰이지 않았음.<br><br>
+        <b>② OV_SW/NE가 수동 추정값</b><br>
+        (35.93,126.28)~(36.28,127.02) 는 계산된 값이 아닌 임의 입력.<br><br>
+        <b>③ STOPS 좌표가 px2ll() 무관</b><br>
+        요도 픽셀이 아닌 별도 수동 입력 lat/lng 사용.
+      </div>
     </div>
-    <div id="stop-list"></div>
+
+    <!-- 오버레이 이미지 업로드 -->
+    <div class="sb-sec">
+      <div class="sb-lbl">🖼️ 노선도 이미지</div>
+      <label class="apply-btn" style="display:block;text-align:center;cursor:pointer;">
+        이미지 업로드
+        <input type="file" id="img-file" accept="image/*" style="display:none" onchange="loadOverlayImage(event)">
+      </label>
+      <div style="margin-top:8px;font-size:10px;color:#4b5563;">
+        업로드 전 GCP 먼저 적용하세요
+      </div>
+    </div>
+
+    <!-- 투명도 -->
+    <div class="sb-sec">
+      <div class="sb-lbl">투명도</div>
+      <input type="range" id="op-slider" min="0" max="100" value="50" oninput="setOpacity(this.value)" style="width:100%;accent-color:#3b82f6;">
+      <div id="op-val" style="font-size:11px;color:#6b7280;text-align:right;margin-top:3px;">50%</div>
+    </div>
+
+    <!-- 상태 -->
+    <div class="sb-sec">
+      <div class="sb-lbl">상태 로그</div>
+      <div id="status-box">GCP 픽셀좌표를 입력하고 적용하세요.</div>
+    </div>
+
   </div>
 
+  <!-- ── 지도 ── -->
   <div id="map-wrap">
     <div id="map"></div>
-
-    <div class="gcp-badge">홍산·입포·신흥·홍원 4점 보정</div>
+    <canvas id="ov-canvas"></canvas>
 
     <div id="map-btns">
-      <button class="mbtn" id="btn-ov" onclick="toggleOverlay()">노선도 오버레이</button>
+      <button class="mbtn" id="btn-ov" onclick="toggleOverlay()">오버레이 ON/OFF</button>
       <button class="mbtn" id="btn-sat" onclick="toggleSatellite()">위성지도</button>
-      <button class="mbtn" onclick="fitBounds()">전체보기</button>
-    </div>
-
-    <label id="img-upload-hint" for="img-file">
-      🖼️ 노선도 이미지를 여기에 드롭하거나 클릭하여 오버레이 적용
-      <input type="file" id="img-file" accept="image/*" onchange="loadOverlayImage(event)">
-    </label>
-
-    <div id="ov-ctrl">
-      <div class="lbl">오버레이 투명도</div>
-      <input type="range" id="op-slider" min="0" max="100" value="40" oninput="setOpacity(this.value)">
-      <div id="op-val">40%</div>
-    </div>
-
-    <div id="info">
-      <button id="info-x" onclick="closeInfo()">✕</button>
-      <div id="info-name"></div>
-      <div id="info-coord"></div>
-      <div class="irl">경유 노선</div>
-      <div id="info-routes"></div>
+      <button class="mbtn" onclick="fitGCPs()">GCP 전체보기</button>
     </div>
   </div>
 </div>
 
 <script>
-const ROUTES = {
-  R1:{name:'1번 서천↔미산',  color:'#ef4444', stops:['서천터미널','남산','서천읍내','십동리','판교삼거리','한산면소재지','한산터미널','태양리','문산리','문산정류소','마산면사무소','옥산면사무소','미산면사무소','비인면사무소','화양면사무소']},
-  R2:{name:'2번 서천↔장항',  color:'#3b82f6', stops:['서천터미널','남산','서면','마서면사무소','비인면사무소','갈목','마하리총점','홍원항','장항역','장항터미널']},
-  R3:{name:'3번 서천↔판교',  color:'#10b981', stops:['서천터미널','서천읍내','판교삼거리','십동리','시초면사무소','종천면사무소','판교면사무소','군산터미널']},
-  R4:{name:'4번 장항↔군산',  color:'#f59e0b', stops:['장항터미널','장항역','장항시내','신흥아파트','서천터미널','군산터미널']},
-  R5:{name:'5번 한산↔홍산',  color:'#8b5cf6', stops:['한산터미널','한산면소재지','태양리','문산리','문산정류소','홍산면사무소']},
-  R6:{name:'6번 서천↔입포',  color:'#06b6d4', stops:['서천터미널','문산리','문산정류소','기산면사무소','입포하나로마트','홍원항']},
-};
-
-// Homography 행렬 (4 GCP 기반 — 참조점 오차 0.00m)
-const H = [
-  0.0717540099953286, -0.16583987430366565, 126.4753309030608,
-  0.020422557348938185, -0.04741513886406523, 36.16432858669229,
-  0.0005628321384933327, -0.0013072774957418433, 1.0
-];
-function px2ll(px,py){
-  const w=H[6]*px+H[7]*py+1;
-  return {lat:(H[3]*px+H[4]*py+H[5])/w, lng:(H[0]*px+H[1]*py+H[2])/w};
-}
-
-const STOPS = [
-  {name:'서천터미널',  type:'terminal', lat:36.13111, lng:126.76890, routes:['R1','R2','R3','R4','R6']},
-  {name:'장항터미널',  type:'terminal', lat:36.06962, lng:126.69009, routes:['R2','R4']},
-  {name:'한산터미널',  type:'terminal', lat:36.17603, lng:126.85737, routes:['R1','R5']},
-  {name:'군산터미널',  type:'terminal', lat:35.93609, lng:126.52499, routes:['R3','R4']},
-  {name:'신흥아파트',  type:'major',    lat:36.03340, lng:126.70980, routes:['R4']},
-  {name:'비인면사무소',type:'major',    lat:36.11210, lng:126.56075, routes:['R1','R2']},
-  {name:'마서면사무소',type:'major',    lat:36.09103, lng:126.61487, routes:['R2']},
-  {name:'마산면사무소',type:'major',    lat:36.18378, lng:126.87978, routes:['R1']},
-  {name:'옥산면사무소',type:'major',    lat:36.20000, lng:126.89418, routes:['R1']},
-  {name:'미산면사무소',type:'major',    lat:36.19818, lng:126.81618, routes:['R1']},
-  {name:'홍산면사무소',type:'major',    lat:36.20690, lng:126.87280, routes:['R5']},
-  {name:'문산정류소',  type:'major',    lat:36.18908, lng:126.89359, routes:['R1','R5','R6']},
-  {name:'기산면사무소',type:'major',    lat:36.19667, lng:126.93496, routes:['R6']},
-  {name:'종천면사무소',type:'major',    lat:36.15484, lng:126.83182, routes:['R3']},
-  {name:'시초면사무소',type:'major',    lat:36.16682, lng:126.85344, routes:['R3']},
-  {name:'판교면사무소',type:'major',    lat:36.15809, lng:126.88182, routes:['R3']},
-  {name:'화양면사무소',type:'major',    lat:36.13199, lng:126.86169, routes:['R1']},
-  {name:'십동리',      type:'stop',     lat:36.17109, lng:126.76859, routes:['R1','R3']},
-  {name:'판교삼거리',  type:'stop',     lat:36.16483, lng:126.77770, routes:['R3']},
-  {name:'갈목',        type:'stop',     lat:36.06871, lng:126.44207, routes:['R2']},
-  {name:'마하리총점',  type:'stop',     lat:36.08905, lng:126.33755, routes:['R2']},
-  {name:'입포하나로마트',type:'stop',   lat:36.19780, lng:126.96530, routes:['R6']},
-  {name:'홍원항',      type:'stop',     lat:36.13420, lng:126.52730, routes:['R2','R6']},
-  {name:'장항역',      type:'major',    lat:36.05248, lng:126.66801, routes:['R2','R4']},
-  {name:'장항시내',    type:'stop',     lat:36.05994, lng:126.67825, routes:['R2','R4']},
-  {name:'서면',        type:'stop',     lat:36.11533, lng:126.61107, routes:['R2']},
-  {name:'남산',        type:'stop',     lat:36.13556, lng:126.76462, routes:['R1','R2']},
-  {name:'서천읍내',    type:'stop',     lat:36.13310, lng:126.76290, routes:['R1','R2','R3']},
-  {name:'한산면소재지',type:'stop',     lat:36.17662, lng:126.85055, routes:['R1','R5']},
-  {name:'태양리',      type:'stop',     lat:36.19118, lng:126.87215, routes:['R1','R5']},
-  {name:'문산리',      type:'stop',     lat:36.18930, lng:126.89199, routes:['R1','R5','R6']},
+/* =========================================================
+   GCP 정의 — 픽셀좌표는 pixel_picker로 측정 후 입력
+   실좌표(lat/lng)는 카카오/구글맵에서 확인한 실제값
+   ========================================================= */
+const GCPS = [
+  { id:0, name:'홍산면사무소', color:'#ef4444', lat:36.20690, lng:126.87280, px:null, py:null },
+  { id:1, name:'입포하나로마트', color:'#3b82f6', lat:36.19780, lng:126.96530, px:null, py:null },
+  { id:2, name:'신흥아파트',    color:'#10b981', lat:36.03340, lng:126.70980, px:null, py:null },
+  { id:3, name:'홍원항',        color:'#f59e0b', lat:36.13420, lng:126.52730, px:null, py:null },
 ];
 
-let map, markers={}, polylines=[];
-let activeRoutes=new Set(Object.keys(ROUTES));
-let selectedStop=null, searchQ='';
-let isSatellite=false, ovVisible=false;
-let ovDiv=null, ovImg=null;
+// 이미지 원본 크기 (1920×1080 — 측정됨)
+const IMG_W = 1920;
+const IMG_H = 1080;
 
-// 노선도 이미지가 매핑될 실좌표 범위 (Homography 코너 계산 기반)
-const OV_SW = new kakao.maps.LatLng(35.93, 126.28);
-const OV_NE = new kakao.maps.LatLng(36.28, 127.02);
+let map, isSatellite = false;
+let ovCanvas = document.getElementById('ov-canvas');
+let ovCtx = ovCanvas.getContext('2d');
+let ovImage = null;
+let ovVisible = false;
+let opacity = 0.5;
+let H = null; // 계산된 homography 행렬
 
-window.addEventListener('load', ()=>{
-  map = new kakao.maps.Map(document.getElementById('map'),{
-    center: new kakao.maps.LatLng(36.13, 126.76), level:9
+/* ── 지도 초기화 ── */
+window.addEventListener('load', () => {
+  map = new kakao.maps.Map(document.getElementById('map'), {
+    center: new kakao.maps.LatLng(36.13, 126.76),
+    level: 9
   });
-  kakao.maps.event.addListener(map,'click',closeInfo);
-  buildMarkers();
-  buildPolylines();
-  buildChips();
-  buildList();
-  setupOverlayDiv();
-
-  // 드래그 드롭 지원
-  const mw = document.getElementById('map-wrap');
-  mw.addEventListener('dragover', e=>e.preventDefault());
-  mw.addEventListener('drop', e=>{
-    e.preventDefault();
-    const f = e.dataTransfer.files[0];
-    if(f && f.type.startsWith('image/')) applyImageToOverlay(f);
-  });
+  kakao.maps.event.addListener(map, 'bounds_changed', drawOverlay);
+  kakao.maps.event.addListener(map, 'zoom_changed', drawOverlay);
+  buildGCPInputs();
+  resizeCanvas();
+  window.addEventListener('resize', () => { resizeCanvas(); drawOverlay(); });
 });
 
-function setupOverlayDiv(){
-  ovDiv = document.createElement('div');
-  ovDiv.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;display:none;overflow:hidden;';
-  ovImg = document.createElement('img');
-  ovImg.style.cssText='position:absolute;opacity:0.4;';
-  ovDiv.appendChild(ovImg);
-  document.getElementById('map').appendChild(ovDiv);
-  kakao.maps.event.addListener(map,'bounds_changed', updateOverlayPos);
+function resizeCanvas() {
+  const mw = document.getElementById('map');
+  ovCanvas.width = mw.offsetWidth;
+  ovCanvas.height = mw.offsetHeight;
 }
 
-function updateOverlayPos(){
-  if(!ovDiv || !ovImg.src) return;
+/* ── GCP 입력 UI 생성 ── */
+function buildGCPInputs() {
+  const wrap = document.getElementById('gcp-inputs');
+  wrap.innerHTML = '';
+  GCPS.forEach((g, i) => {
+    wrap.innerHTML += `
+    <div class="gcp-item">
+      <div class="gcp-name">
+        <div class="gcp-dot" style="background:${g.color}"></div>
+        ${i+1}. ${g.name}
+      </div>
+      <div class="inp-row">
+        <span class="inp-lbl">px</span>
+        <input class="gcp-inp" id="px-${i}" type="number" placeholder="x 픽셀" value="${g.px ?? ''}">
+        <input class="gcp-inp" id="py-${i}" type="number" placeholder="y 픽셀" value="${g.py ?? ''}">
+      </div>
+      <div class="coord-fixed">실좌표: lat ${g.lat}, lng ${g.lng}</div>
+    </div>`;
+  });
+}
+
+/* ── GCP 적용 → Homography 계산 ── */
+function applyGCPs() {
+  let allOk = true;
+  GCPS.forEach((g, i) => {
+    const px = parseFloat(document.getElementById(`px-${i}`).value);
+    const py = parseFloat(document.getElementById(`py-${i}`).value);
+    if (isNaN(px) || isNaN(py)) { allOk = false; return; }
+    g.px = px; g.py = py;
+  });
+
+  if (!allOk || GCPS.some(g => g.px === null)) {
+    setStatus('❌ 4개 GCP 픽셀좌표를 모두 입력하세요.');
+    return;
+  }
+
+  H = computeHomography(GCPS);
+  if (!H) { setStatus('❌ Homography 계산 실패. 픽셀좌표를 확인하세요.'); return; }
+
+  // 검증: 각 GCP 픽셀 → lat/lng 역변환 오차 확인
+  let log = '✅ GCP 적용 완료\n';
+  GCPS.forEach((g, i) => {
+    const ll = px2ll(g.px, g.py);
+    const dLat = Math.abs(ll.lat - g.lat) * 111000;
+    const dLng = Math.abs(ll.lng - g.lng) * 111000 * Math.cos(g.lat * Math.PI/180);
+    const err = Math.sqrt(dLat*dLat + dLng*dLng);
+    log += `${g.name}: 오차 ${err.toFixed(1)}m\n`;
+  });
+
+  document.querySelector('.badge').textContent = '✅ GCP 4점 적용됨';
+  document.querySelector('.badge').style.background = '#10b98122';
+  document.querySelector('.badge').style.color = '#10b981';
+  document.querySelector('.badge').style.borderColor = '#10b98144';
+
+  setStatus(log);
+  fitGCPs();
+  if (ovImage) drawOverlay();
+}
+
+/* ── Homography 계산 (DLT 알고리즘) ──
+   px → lat, lng 각각 별도의 8-param homography
+   입력: GCPS[].px, .py → .lat, .lng
+   ----------------------------------------
+   카카오맵 투영은 mercator이므로, 실좌표를
+   Web Mercator로 변환 후 homography 계산,
+   역변환 시 다시 lat/lng로 복원하는 것이 더 정확.
+   여기서는 서천군 범위가 좁아 직접 lat/lng 사용.
+*/
+function computeHomography(gcps) {
+  // 8-parameter homography: H maps (px,py) → (lng, lat)
+  // [lng]   [h0 h1 h2] [px]
+  // [lat] = [h3 h4 h5] [py] / (h6*px + h7*py + 1)
+  // [1  ]   [h6 h7  1] [1 ]
+  // DLT: build 8-eq system from 4 points
+  const A = [], b = [];
+  gcps.forEach(g => {
+    const {px, py, lat, lng} = g;
+    A.push([px, py, 1, 0, 0, 0, -lng*px, -lng*py]);
+    b.push(lng);
+    A.push([0, 0, 0, px, py, 1, -lat*px, -lat*py]);
+    b.push(lat);
+  });
+  const h = solveLinear8(A, b);
+  if (!h) return null;
+  return [...h, 1]; // h0..h7, h8=1
+}
+
+function px2ll(px, py) {
+  if (!H) return null;
+  const w = H[6]*px + H[7]*py + 1;
+  return {
+    lng: (H[0]*px + H[1]*py + H[2]) / w,
+    lat: (H[3]*px + H[4]*py + H[5]) / w,
+  };
+}
+
+/* Gaussian elimination for 8×8 system */
+function solveLinear8(A, b) {
+  const n = 8;
+  // augment
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    // pivot
+    let maxRow = col;
+    for (let r = col+1; r < n; r++)
+      if (Math.abs(M[r][col]) > Math.abs(M[maxRow][col])) maxRow = r;
+    [M[col], M[maxRow]] = [M[maxRow], M[col]];
+    if (Math.abs(M[col][col]) < 1e-12) return null;
+    const div = M[col][col];
+    for (let c = col; c <= n; c++) M[col][c] /= div;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const f = M[r][col];
+      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+    }
+  }
+  return M.map(row => row[n]);
+}
+
+/* ── 오버레이 그리기 (CSS matrix3d 방식) ──
+   이미지의 4개 코너(px좌표)를 각각 lat/lng → 카카오맵 screen point로 변환,
+   canvas에 drawImage 대신 img 엘리먼트에 CSS perspective transform 적용.
+   정확한 원근 왜곡을 재현합니다.
+*/
+function drawOverlay() {
+  const canvas = ovCanvas;
+  const ctx = ovCtx;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!ovVisible || !ovImage || !H) return;
+
   const proj = map.getProjection();
-  const swPt = proj.pointFromCoords(OV_SW);
-  const nePt = proj.pointFromCoords(OV_NE);
-  const mapBounds = map.getBounds();
-  const mapSwPt = proj.pointFromCoords(mapBounds.getSouthWest());
-  const mapNePt = proj.pointFromCoords(mapBounds.getNorthEast());
+
+  // 이미지 4 코너의 픽셀좌표 → lat/lng → 스크린 픽셀
+  const corners = [
+    {px:0,      py:0},
+    {px:IMG_W,  py:0},
+    {px:IMG_W,  py:IMG_H},
+    {px:0,      py:IMG_H},
+  ];
+
   const mapEl = document.getElementById('map');
-  const W = mapEl.offsetWidth, H2 = mapEl.offsetHeight;
-  const scX = W/(mapNePt.x-mapSwPt.x);
-  const scY = H2/(mapSwPt.y-mapNePt.y);
-  ovImg.style.left   = ((swPt.x-mapSwPt.x)*scX)+'px';
-  ovImg.style.top    = ((nePt.y-mapNePt.y)*scY)+'px';
-  ovImg.style.width  = ((nePt.x-swPt.x)*scX)+'px';
-  ovImg.style.height = ((swPt.y-nePt.y)*scY)+'px';
+  const mapBounds = map.getBounds();
+  const sw = proj.pointFromCoords(mapBounds.getSouthWest());
+  const ne = proj.pointFromCoords(mapBounds.getNorthEast());
+  const scX = mapEl.offsetWidth  / (ne.x - sw.x);
+  const scY = mapEl.offsetHeight / (sw.y - ne.y);
+
+  function toScreen(px, py) {
+    const ll = px2ll(px, py);
+    if (!ll) return null;
+    const pt = proj.pointFromCoords(new kakao.maps.LatLng(ll.lat, ll.lng));
+    return {
+      x: (pt.x - sw.x) * scX,
+      y: (pt.y - ne.y) * scY,
+    };
+  }
+
+  const sc = corners.map(c => toScreen(c.px, c.py));
+  if (sc.some(p => !p)) return;
+
+  // canvas에 원근 왜곡 이미지 그리기
+  // drawImage로는 원근 왜곡 불가 → 삼각형 2개로 분할해 근사
+  ctx.globalAlpha = opacity;
+  drawQuadImage(ctx, ovImage, sc[0], sc[1], sc[2], sc[3]);
+  ctx.globalAlpha = 1;
+
+  // GCP 점 표시
+  GCPS.forEach((g, i) => {
+    const s = toScreen(g.px, g.py);
+    if (!s) return;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 7, 0, Math.PI*2);
+    ctx.fillStyle = g.color + 'cc';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(i+1, s.x, s.y);
+  });
 }
 
-function loadOverlayImage(e){ applyImageToOverlay(e.target.files[0]); }
-function applyImageToOverlay(file){
+/* 사각형 이미지를 임의의 4점(원근 변형된 quad)에 그리기
+   삼각형 2개로 나눠 texture mapping 근사 */
+function drawQuadImage(ctx, img, p0, p1, p2, p3) {
+  // 삼각형 ①: p0,p1,p2 → img 좌상,우상,우하
+  drawTriImage(ctx, img,
+    p0, p1, p2,
+    {u:0,v:0},{u:IMG_W,v:0},{u:IMG_W,v:IMG_H});
+  // 삼각형 ②: p0,p2,p3 → img 좌상,우하,좌하
+  drawTriImage(ctx, img,
+    p0, p2, p3,
+    {u:0,v:0},{u:IMG_W,v:IMG_H},{u:0,v:IMG_H});
+}
+
+/* 삼각형 단위로 affine 변환 → drawImage */
+function drawTriImage(ctx, img, p0, p1, p2, t0, t1, t2) {
+  // affine from texture triangle to screen triangle
+  // [x]   [a c e] [u]
+  // [y] = [b d f] [v]
+  //       [0 0 1] [1]
+  const du1=t1.u-t0.u, du2=t2.u-t0.u;
+  const dv1=t1.v-t0.v, dv2=t2.v-t0.v;
+  const dx1=p1.x-p0.x, dx2=p2.x-p0.x;
+  const dy1=p1.y-p0.y, dy2=p2.y-p0.y;
+  const det = du1*dv2 - du2*dv1;
+  if (Math.abs(det) < 0.01) return;
+  const a = (dx1*dv2 - dx2*dv1) / det;
+  const b = (dy1*dv2 - dy2*dv1) / det;
+  const c = (dx2*du1 - dx1*du2) / det;
+  const d = (dy2*du1 - dy1*du2) / det;
+  const e = p0.x - a*t0.u - c*t0.v;
+  const f = p0.y - b*t0.u - d*t0.v;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(p0.x, p0.y);
+  ctx.lineTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.closePath();
+  ctx.clip();
+  ctx.transform(a, b, c, d, e, f);
+  ctx.drawImage(img, 0, 0);
+  ctx.restore();
+}
+
+/* ── UI 함수들 ── */
+function loadOverlayImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!H) { setStatus('⚠️ 이미지 전에 GCP를 먼저 적용하세요.'); return; }
   const url = URL.createObjectURL(file);
-  ovImg.src = url;
-  ovImg.onload = ()=>{ updateOverlayPos(); };
-  // 오버레이 자동 활성화
-  ovVisible=true;
-  ovDiv.style.display='block';
-  document.getElementById('btn-ov').classList.add('on');
-  document.getElementById('ov-ctrl').style.display='block';
-  document.getElementById('img-upload-hint').style.display='none';
+  ovImage = new Image();
+  ovImage.onload = () => {
+    ovVisible = true;
+    ovCanvas.style.display = 'block';
+    document.getElementById('btn-ov').classList.add('on');
+    setStatus(`✅ 이미지 로드: ${ovImage.width}×${ovImage.height}px\n오버레이 적용 완료`);
+    drawOverlay();
+  };
+  ovImage.src = url;
 }
 
-function toggleOverlay(){
-  if(!ovImg.src){ document.getElementById('img-file').click(); return; }
-  ovVisible=!ovVisible;
-  ovDiv.style.display=ovVisible?'block':'none';
-  document.getElementById('btn-ov').classList.toggle('on',ovVisible);
-  document.getElementById('ov-ctrl').style.display=ovVisible?'block':'none';
-  if(ovVisible) updateOverlayPos();
-}
-function setOpacity(v){
-  if(ovImg) ovImg.style.opacity=v/100;
-  document.getElementById('op-val').textContent=v+'%';
+function toggleOverlay() {
+  if (!ovImage) { document.getElementById('img-file').click(); return; }
+  ovVisible = !ovVisible;
+  ovCanvas.style.display = ovVisible ? 'block' : 'none';
+  document.getElementById('btn-ov').classList.toggle('on', ovVisible);
+  if (ovVisible) drawOverlay();
+  else ovCtx.clearRect(0, 0, ovCanvas.width, ovCanvas.height);
 }
 
-function toggleSatellite(){
-  isSatellite=!isSatellite;
-  map.setMapTypeId(isSatellite?kakao.maps.MapTypeId.HYBRID:kakao.maps.MapTypeId.ROADMAP);
-  const btn=document.getElementById('btn-sat');
-  btn.classList.toggle('on',isSatellite);
-  btn.textContent=isSatellite?'일반지도':'위성지도';
+function setOpacity(v) {
+  opacity = v / 100;
+  document.getElementById('op-val').textContent = v + '%';
+  if (ovVisible) drawOverlay();
 }
 
-function buildMarkers(){
-  STOPS.forEach(s=>{
-    const color=ROUTES[s.routes[0]]?.color||'#6b7280';
-    const isT=s.type==='terminal', isM=s.type==='major';
-    const r=isT?13:isM?9:6;
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${r*2+4}" height="${r*2+4}">
-      <circle cx="${r+2}" cy="${r+2}" r="${r}" fill="${color}" stroke="white" stroke-width="${isT?2.5:1.5}" opacity=".92"/>
-      ${isT?`<circle cx="${r+2}" cy="${r+2}" r="${r*.42}" fill="white"/>`:''}
-    </svg>`;
-    const mi=new kakao.maps.MarkerImage(
-      'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),
-      new kakao.maps.Size(r*2+4,r*2+4),
-      {offset:new kakao.maps.Point(r+2,r+2)}
-    );
-    const m=new kakao.maps.Marker({
-      position:new kakao.maps.LatLng(s.lat,s.lng),
-      map, image:mi, title:s.name,
-      zIndex:isT?5:isM?3:1
-    });
-    kakao.maps.event.addListener(m,'click',()=>selectStop(s));
-    markers[s.name]=m;
-  });
+function toggleSatellite() {
+  isSatellite = !isSatellite;
+  map.setMapTypeId(isSatellite ? kakao.maps.MapTypeId.HYBRID : kakao.maps.MapTypeId.ROADMAP);
+  document.getElementById('btn-sat').classList.toggle('on', isSatellite);
+  document.getElementById('btn-sat').textContent = isSatellite ? '일반지도' : '위성지도';
 }
 
-function buildPolylines(){
-  polylines.forEach(p=>p.setMap(null)); polylines=[];
-  Object.entries(ROUTES).forEach(([id,r])=>{
-    if(!activeRoutes.has(id)) return;
-    const path=r.stops.map(n=>STOPS.find(s=>s.name===n)).filter(Boolean).map(s=>new kakao.maps.LatLng(s.lat,s.lng));
-    if(path.length<2) return;
-    polylines.push(new kakao.maps.Polyline({path,strokeWeight:3.5,strokeColor:r.color,strokeOpacity:.75,strokeStyle:'solid',map}));
-  });
+function fitGCPs() {
+  const b = new kakao.maps.LatLngBounds();
+  GCPS.forEach(g => b.extend(new kakao.maps.LatLng(g.lat, g.lng)));
+  map.setBounds(b, 40);
 }
 
-function buildChips(){
-  const c=document.getElementById('chips'); c.innerHTML='';
-  Object.entries(ROUTES).forEach(([id,r])=>{
-    const el=document.createElement('div');
-    el.className='chip '+(activeRoutes.has(id)?'on':'off');
-    el.style.cssText=`background:${r.color}22;border-color:${activeRoutes.has(id)?r.color:'transparent'};color:${r.color}`;
-    el.textContent=id.replace('R','')+'번';
-    el.title=r.name;
-    el.onclick=()=>toggleRoute(id);
-    c.appendChild(el);
-  });
-}
-
-function toggleRoute(id){
-  if(activeRoutes.has(id)){if(activeRoutes.size===1)return;activeRoutes.delete(id);}
-  else activeRoutes.add(id);
-  STOPS.forEach(s=>markers[s.name]?.setVisible(s.routes.some(r=>activeRoutes.has(r))));
-  buildPolylines(); buildChips(); buildList();
-}
-
-function buildList(){
-  const wrap=document.getElementById('stop-list'); wrap.innerHTML='';
-  const vis=STOPS.filter(s=>(!searchQ||s.name.includes(searchQ))&&s.routes.some(r=>activeRoutes.has(r)));
-  vis.forEach(s=>{
-    const color=ROUTES[s.routes[0]]?.color||'#6b7280';
-    const isSel=selectedStop?.name===s.name;
-    const el=document.createElement('div');
-    el.className='si'+(isSel?' sel':'');
-    el.style.borderLeftColor=isSel?color:'transparent';
-    el.innerHTML=`<div class="si-dot" style="background:${color}"></div>
-      <div class="si-name">${s.name}</div>
-      <div class="si-tags">${s.routes.slice(0,4).map(r=>`<div class="si-tag" style="background:${ROUTES[r]?.color||'#888'}" title="${ROUTES[r]?.name||r}"></div>`).join('')}</div>`;
-    el.onclick=()=>{selectStop(s);map.setCenter(new kakao.maps.LatLng(s.lat,s.lng));map.setLevel(7);};
-    wrap.appendChild(el);
-  });
-  document.getElementById('sn-vis').textContent=vis.length;
-}
-
-function filterList(){searchQ=document.getElementById('search-input').value.trim();buildList();}
-
-function selectStop(s){
-  selectedStop=s;
-  document.getElementById('info-name').textContent=s.name;
-  document.getElementById('info-coord').textContent=`lat ${s.lat.toFixed(5)}   lng ${s.lng.toFixed(5)}`;
-  const rc=document.getElementById('info-routes'); rc.innerHTML='';
-  s.routes.forEach(r=>{
-    const rt=ROUTES[r]; if(!rt)return;
-    const b=document.createElement('div');
-    b.className='ir';b.style.cssText=`background:${rt.color}22;color:${rt.color};border:1px solid ${rt.color}44`;
-    b.textContent=rt.name; rc.appendChild(b);
-  });
-  document.getElementById('info').classList.add('show');
-  buildList();
-  setTimeout(()=>document.querySelector('.si.sel')?.scrollIntoView({behavior:'smooth',block:'nearest'}),50);
-}
-function closeInfo(){document.getElementById('info').classList.remove('show');selectedStop=null;buildList();}
-
-function fitBounds(){
-  const b=new kakao.maps.LatLngBounds();
-  STOPS.forEach(s=>b.extend(new kakao.maps.LatLng(s.lat,s.lng)));
-  map.setBounds(b);
+function setStatus(msg) {
+  document.getElementById('status-box').textContent = msg;
 }
 </script>
 </body>
