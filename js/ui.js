@@ -69,6 +69,14 @@ function showScreen(name, pushHistory = true) {
   // 탭바 전체를 현재 화면 기준으로 다시 렌더링
   renderAllTabbars();
 
+  // display:none → flex 복귀 후 카카오맵 크기 재계산
+  // (relayout 없이 줌/이동하면 타일이 남동쪽으로 밀리는 버그 발생)
+  requestAnimationFrame(() => {
+    if (name === 'home'   && STATE.mapHome)   STATE.mapHome.relayout();
+    if (name === 'detail' && STATE.mapDetail) STATE.mapDetail.relayout();
+    if (name === 'routes' && STATE.mapRoutes) STATE.mapRoutes.relayout();
+  });
+
   STATE.currentScreen = name;
 
   if (name==='routes' && !STATE.mapRoutes) setTimeout(initRoutesMap, 100);
