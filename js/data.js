@@ -103,20 +103,24 @@ const STATE = {
 };
 
 // ==================== 데이터 ====================
-let ROUTES = [];
-let STOPS  = [];
+let ROUTES    = [];
+let STOPS     = [];
+let TIMETABLE = {};  // { "번호_기점": { stops, weekday, sat?, hol? } }
 
 async function loadData() {
   try {
-    const [rRes, sRes] = await Promise.all([
+    const [rRes, sRes, ttRes] = await Promise.all([
       fetch('data/routes.json'),
       fetch('data/stops.json'),
+      fetch('data/timetable.json?v=1', { cache: 'no-cache' }),
     ]);
 
     if (!rRes.ok || !sRes.ok) throw new Error('데이터 파일 응답 오류');
 
-    ROUTES = await rRes.json();
-    STOPS  = buildDisplayNames(await sRes.json());
+    ROUTES    = await rRes.json();
+    STOPS     = buildDisplayNames(await sRes.json());
+    TIMETABLE = ttRes.ok ? await ttRes.json() : {};
+    console.log('시간표 로드 완료: ' + Object.keys(TIMETABLE).length + '개 노선');
   } catch(e) {
     console.warn('데이터 로드 실패', e);
     // 사용자에게 오류 안내 표시
@@ -205,21 +209,53 @@ function getCountKey(dayType){
   return dayType==='weekday'?'평일횟수':dayType==='sat'?'토요일횟수':'공휴일횟수';
 }
 
-// 노선 시간 배열 생성
-function getRouteTimes(route, dayType){
-  const count=route[getCountKey(dayType)]||0;
-  if(!count||!route['첫차']||!route['막차']) return [];
-  const fMin=timeToMin(route['첫차']), lMin=timeToMin(route['막차']);
-  const interval=count>1?Math.round((lMin-fMin)/(count-1)):0;
-  const times=[];
-  for(let i=0;i<count;i++) times.push(fMin+interval*i);
+// 노선 시간 배열 생성 (timetable.json 우선, 없으면 균등분할 fallback)
+function getRouteTimes(route, dayType) {
+  const key = route['번호'] + '_' + route['기점'];
+  const tt  = TIMETABLE[key];
+  if (tt) {
+    // timetable.json: times 배열의 첫 번째 열(기점 출발시각)을 분으로 변환
+    const times = (tt[dayType] || tt['weekday'] || [])
+      .map(row => {
+        const t = Array.isArray(row) ? row[0] : row;
+        return (t && typeof t === 'string' && t.includes(':')) ? timeToMin(t) : null;
+      })
+      .filter(t => t !== null);
+    if (times.length) return times;
+  }
+  // fallback: 첫차~막차 균등 분할
+  const count = route[getCountKey(dayType)] || 0;
+  if (!count || !route['첫차'] || !route['막차']) return [];
+  const fMin = timeToMin(route['첫차']), lMin = timeToMin(route['막차']);
+  const interval = count > 1 ? Math.round((lMin - fMin) / (count - 1)) : 0;
+  const times = [];
+  for (let i = 0; i < count; i++) times.push(fMin + interval * i);
   return times;
 }
 
+// timetable.json에서 특정 정류장의 통과 시각 배열 반환
+// stopName: 시간표상 정류장 이름, returns: [분, ...] 배열 (null 제외)
+function getStopPassTimes(route, stopName, dayType) {
+  const key = route['번호'] + '_' + route['기점'];
+  const tt  = TIMETABLE[key];
+  if (!tt) return null;
+  const stops = tt.stops || [];
+  const idx   = stops.indexOf(stopName);
+  if (idx === -1) return null;
+  const rows = tt[dayType] || tt['weekday'] || [];
+  const times = rows
+    .map(row => {
+      const t = Array.isArray(row) ? row[idx] : null;
+      return (t && typeof t === 'string' && t.includes(':')) ? timeToMin(t) : null;
+    })
+    .filter(t => t !== null);
+  return times.length ? times : null;
+}
+
 // 다음 버스 (분 단위 반환)
-function getNextBusMin(route, baseMin, dayType){
-  const times=getRouteTimes(route, dayType);
-  return times.find(t=>t>=baseMin)??null;
+function getNextBusMin(route, baseMin, dayType) {
+  const times = getRouteTimes(route, dayType);
+  return times.find(t => t >= baseMin) ?? null;
 }
 
 function isInSeocheon(lat,lng){

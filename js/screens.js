@@ -232,22 +232,46 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     }
     // ─────────────────────────────────────────────────────
 
-    // 기점에서 검색 정류장까지 소요시간 추정 후 각 회차 통과 시각을 rows에 추가
-    const busTimes = getRouteTimes(route, dayType);
-    const color    = getZoneColor(route);
-    const busNum   = getBusNum(route);
-    busTimes.forEach(depMin => {
-      const passMin = depMin + leg0;
-      rows.push({
-        passMin,
-        busNum,
-        color,
-        via:      viaList.join(' → '),
-        terminus,
-        isPast:   passMin < nMin,
-        route,
+    // 통과 시각: timetable.json 실제 값 우선, 없으면 출발시각+소요시간 추정
+    const color  = getZoneColor(route);
+    const busNum = getBusNum(route);
+
+    // timetable.json에서 해당 정류장 컬럼 찾기
+    const ttKey   = route['번호'] + '_' + route['기점'];
+    const tt      = TIMETABLE[ttKey];
+    const ttStops = tt?.stops || [];
+    // coords 상의 정류장명과 timetable stops 매칭
+    let ttColIdx = -1;
+    for (let ci = 0; ci < ttStops.length; ci++) {
+      const ts = ttStops[ci];
+      if (coords.some(c => c.name === ts || (stopName && ts === stopName))) {
+        // 검색 정류장과 가장 가까운 컬럼 선택
+        if (ts === stopName || ttStops[ci] === coords[idx]?.name) {
+          ttColIdx = ci; break;
+        }
+        if (ttColIdx === -1) ttColIdx = ci;
+      }
+    }
+
+    const ttRows = tt ? (tt[dayType] || tt['weekday'] || []) : [];
+    const useTT  = ttColIdx !== -1 && ttRows.length > 0;
+
+    if (useTT) {
+      // timetable 실제 통과 시각 사용
+      ttRows.forEach(row => {
+        const cell = Array.isArray(row) ? row[ttColIdx] : null;
+        if (!cell || typeof cell !== 'string' || !cell.includes(':')) return;
+        const passMin = timeToMin(cell);
+        rows.push({ passMin, busNum, color, via: viaList.join(' → '), terminus, isPast: passMin < nMin, route });
       });
-    });
+    } else {
+      // fallback: 출발시각 + 소요시간 추정
+      const busTimes = getRouteTimes(route, dayType);
+      busTimes.forEach(depMin => {
+        const passMin = depMin + leg0;
+        rows.push({ passMin, busNum, color, via: viaList.join(' → '), terminus, isPast: passMin < nMin, route });
+      });
+    }
   });
 
   rows.sort((a, b) => a.passMin - b.passMin);
@@ -421,7 +445,12 @@ function renderRouteList(zoneId) {
     const num   = getBusNum(r);
     const via   = [r['기점'], ...r['경유'].split('→').filter(Boolean).slice(0,2), r['종점']].join('→');
     const ck    = getCountKey(getDayType());
-    const cnt   = r[ck]||0;
+    const ttKey = r['번호'] + '_' + r['기점'];
+    const tt    = TIMETABLE[ttKey];
+    const ttDay = getDayType();
+    const cnt   = tt
+      ? (tt[ttDay] || tt['weekday'] || []).length
+      : (r[ck] || 0);
     const isActive = STATE.selectedRoute?.['번호']===r['번호'] && STATE.selectedRoute?.['기점']===r['기점'];
     return `<div class="route-list-item${isActive?' active':''}" id="rli-${r['번호']}-${r['기점'].replace(/\s/g,'')}" onclick="selectRoute(${JSON.stringify(r).replace(/"/g,'&quot;')})">
       <span class="bus-pill" style="background:${color};font-size:10px;padding:2px 5px">${num}</span>

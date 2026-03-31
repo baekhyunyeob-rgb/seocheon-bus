@@ -33,7 +33,7 @@ function _hideBuildProgress() {
 async function buildRouteCoords() {
   _showBuildProgress('노선 데이터 로드 중...');
   try {
-    const res = await fetch('data/route_coords.json?v=3', { cache: 'no-cache' });
+    const res = await fetch('data/route_coords.json?v=4', { cache: 'no-cache' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     for (const [key, val] of Object.entries(data)) {
