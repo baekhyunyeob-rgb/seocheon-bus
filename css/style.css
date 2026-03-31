@@ -484,7 +484,7 @@ input[type="time"].custom-time {
   flex-shrink: 0;
 }
 .zone-legend-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-.zone-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+.zone-pills { display: flex; gap: 4px; flex-wrap: nowrap; }
 .zone-pill {
   display: flex; align-items: center; gap: 4px;
   background: #f5f5f5; border-radius: 20px; padding: 4px 10px;
@@ -497,23 +497,23 @@ input[type="time"].custom-time {
 
 /* 버스노선도 형식 권역 배지 */
 .zone-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 6px; padding: 5px 11px;
+  display: flex; align-items: center; justify-content: center;
+  flex: 1; min-width: 0;
+  border-radius: 6px; padding: 5px 2px;
   cursor: pointer;
   transition: all .15s;
   opacity: 0.72;
   border: 2px solid transparent;
 }
 .zone-badge span {
-  font-size: 11px; font-weight: 700; color: #fff;
-  letter-spacing: 0.3px; white-space: nowrap;
+  font-size: 10px; font-weight: 700; color: #fff;
+  letter-spacing: -0.2px; white-space: nowrap;
 }
 .zone-badge.active {
   opacity: 1;
   border-color: rgba(255,255,255,0.8);
   box-shadow: 0 2px 8px rgba(0,0,0,.18);
 }
-
 .routes-map-wrap { position: relative; flex-shrink: 0; }
 .routes-list { flex: 1; overflow-y: auto; }
 .route-list-item {

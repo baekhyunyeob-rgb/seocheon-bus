@@ -33,22 +33,22 @@ const ZONE_BY_GUNNAME = {
   '600번대 마서.장항권역 지선(관광선)':   'janghang',
   '700번대 마서권역 지선(갈목선)':        'janghang',
   // 종천·판교선 (적색)
+  '11~14번 북산선':                       'jongpan',
   '40번대 판교선':                        'jongpan',
   '500번대 종천.판교권역 지선':           'jongpan',
   // 문산선 (고동색)
   '50번대 문산선':                        'munsan',
   '70번대 봉선리선':                      'munsan',
   // 한산·화양선 (녹색)
-  '11~14번 북산선':                       'hanyang',
   '30번대 한산선':                        'hanyang',
   '300번대 한산지선':                     'hanyang',
   '300번대 한산지선(마서)':               'hanyang',
   '400번대 기산.마산.한산권역 지선':      'hanyang',
   '60번대 화양선':                        'hanyang',
-  // 타시도
-  '타시도 군산시':                        'outer',
-  '타시도 보령시':                        'outer',
-  '타시도 부여군':                        'outer',
+  // 타시도 — 색은 회색 유지, 권역 탭 시 함께 표시
+  '타시도 보령시':                        'dongbaek',  // 동백·비인선과 함께
+  '타시도 군산시':                        'janghang',  // 장항·군산선과 함께
+  '타시도 부여군':                        'hanyang',   // 한산·화양선과 함께
 };
 
 // 권역 ID 반환 — 노선군 직접 조회 → 없으면 janghang 기본값
@@ -57,8 +57,10 @@ function getZoneId(route) {
   return ZONE_BY_GUNNAME[gun] ?? 'janghang';
 }
 
-// 권역 색상 반환
+// 권역 색상 반환 — 타시도 노선은 항상 회색
 function getZoneColor(route) {
+  const gun = route['노선군'] || '';
+  if (gun.startsWith('타시도')) return '#aaa';
   const id = getZoneId(route);
   return ZONES.find(z => z.id === id)?.color ?? ZONES[0].color;
 }
