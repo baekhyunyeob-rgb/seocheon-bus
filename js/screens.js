@@ -406,7 +406,7 @@ function initRoutesScreen() {
 function renderZoneLegend() {
   const el = document.getElementById('zone-pills');
   if (!el) return;
-  el.innerHTML = ZONES.slice(0,4).map(z =>
+  el.innerHTML = ZONES.filter(z => z.id !== 'outer').map(z =>
     `<div class="zone-badge" id="zone-pill-${z.id}" onclick="filterByZone('${z.id}')"
       style="background:${z.color}">
       <span>${z.name}</span>

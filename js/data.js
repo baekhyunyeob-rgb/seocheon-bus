@@ -8,52 +8,53 @@ const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
 const SEOCHEON_BOUNDS = { minLat:35.97, maxLat:36.22, minLng:126.49, maxLng:126.89 };
 
 const ZONES = [
-  { id:'seojang', name:'서천·장항', color:'#185FA5' },
-  { id:'hanyang', name:'한산·화양', color:'#1D9E75' },
-  { id:'munpan',  name:'문산·판교', color:'#7F77DD' },
-  { id:'seodon',  name:'서면·동백', color:'#E24B4A' },
-  { id:'outer',   name:'서천 외',   color:'#aaa'    },
+  { id:'dongbaek', name:'동백·비인선', color:'#1A5DAB' },
+  { id:'janghang', name:'장항·군산선', color:'#41AEDF' },
+  { id:'jongpan',  name:'종천·판교선', color:'#D63B3B' },
+  { id:'munsan',   name:'문산선',      color:'#8B5A2B' },
+  { id:'hanyang',  name:'한산·화양선', color:'#2E8B57' },
+  { id:'outer',    name:'서천 외',     color:'#aaa'    },
 ];
 
 // ── 노선군 → 권역 직접 매핑 테이블 ──────────────────────────────────
-// 노선군 문자열을 키로 사용하므로 정규식 오탐이 구조적으로 불가능.
-// 새 노선군이 추가되면 이 테이블에 한 줄만 추가하면 됨.
+// 서천군 공식 노선색 기준으로 분류
 const ZONE_BY_GUNNAME = {
-  // 서천·장항 (남서권)
-  '100번대 장항.동백선':                  'seojang',
-  '10번 하구둑.군산선':                   'seojang',
-  '20번대 장항선':                        'seojang',
-  '20번대 장항선(옥산)':                  'seojang',
-  '200번대 산내.장상선':                  'seojang',
-  '600번대 마서.장항권역 지선(관광선)':   'seojang',
-  '700번대 마서권역 지선(갈목선)':        'seojang',
-  // 한산·화양 (남동권)
+  // 동백·비인선 (청색)
+  '1~4번 동백선':                         'dongbaek',
+  '100번대 장항.동백선':                  'dongbaek',
+  '80번대 당정.다사리선':                 'dongbaek',
+  '90번대 울리.비인선':                   'dongbaek',
+  '800번대 종천.비인.서면권역 지선':      'dongbaek',
+  // 장항·군산선 (하늘색)
+  '10번 하구둑.군산선':                   'janghang',
+  '20번대 장항선':                        'janghang',
+  '20번대 장항선(옥산)':                  'janghang',
+  '200번대 산내.장상선':                  'janghang',
+  '600번대 마서.장항권역 지선(관광선)':   'janghang',
+  '700번대 마서권역 지선(갈목선)':        'janghang',
+  // 종천·판교선 (적색)
+  '40번대 판교선':                        'jongpan',
+  '500번대 종천.판교권역 지선':           'jongpan',
+  // 문산선 (고동색)
+  '50번대 문산선':                        'munsan',
+  '70번대 봉선리선':                      'munsan',
+  // 한산·화양선 (녹색)
   '11~14번 북산선':                       'hanyang',
+  '30번대 한산선':                        'hanyang',
   '300번대 한산지선':                     'hanyang',
   '300번대 한산지선(마서)':               'hanyang',
-  '30번대 한산선':                        'hanyang',
   '400번대 기산.마산.한산권역 지선':      'hanyang',
   '60번대 화양선':                        'hanyang',
-  // 문산·판교 (북동권)
-  '40번대 판교선':                        'munpan',
-  '50번대 문산선':                        'munpan',
-  '500번대 종천.판교권역 지선':           'munpan',
-  '70번대 봉선리선':                      'munpan',  // 73~77번이 서천↔문산 주축
-  // 서면·동백 (북서권)
-  '1~4번 동백선':                         'seodon',
-  '800번대 종천.비인.서면권역 지선':      'seodon',
-  '80번대 당정.다사리선':                 'seodon',  // 81·85·86번이 서면·비인 방향
-  '90번대 울리.비인선':                   'seodon',
   // 타시도
   '타시도 군산시':                        'outer',
   '타시도 보령시':                        'outer',
   '타시도 부여군':                        'outer',
 };
 
-// 권역 ID 반환 — 노선군 직접 조회 → 없으면 seojang 기본값
+// 권역 ID 반환 — 노선군 직접 조회 → 없으면 janghang 기본값
 function getZoneId(route) {
   const gun = route['노선군'] || '';
-  return ZONE_BY_GUNNAME[gun] ?? 'seojang';
+  return ZONE_BY_GUNNAME[gun] ?? 'janghang';
 }
 
 // 권역 색상 반환
