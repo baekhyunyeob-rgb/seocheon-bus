@@ -519,10 +519,10 @@ function renderRouteList(zoneId) {
     if (zone) filtered = filtered.filter(r => getZoneId(r) === zoneId);
   }
 
-  // 같은 번호대+기점 그룹 미리 계산
+  // 기점+종점+노선군 기준 그룹 미리 계산
   const groupMap = new Map();
-  filtered.forEach(r => {
-    const gk = (Math.floor((parseInt(r['번호'])||0) / 10) * 10) + '|' + r['기점'];
+  ROUTES.forEach(r => {
+    const gk = r['기점'] + '||' + r['종점'] + '||' + (r['노선군']||'');
     if (!groupMap.has(gk)) groupMap.set(gk, []);
     groupMap.get(gk).push(r);
   });
@@ -538,16 +538,16 @@ function renderRouteList(zoneId) {
       : (r[getCountKey(getDayType())] || 0);
     const isActive = STATE.selectedRoute?.['번호']===r['번호'] && STATE.selectedRoute?.['기점']===r['기점'];
 
-    // 차이 경유지
-    const gk = (Math.floor((parseInt(r['번호'])||0) / 10) * 10) + '|' + r['기점'];
+    // 기점+종점+노선군 그룹 내 차이 경유지
+    const gk = r['기점'] + '||' + r['종점'] + '||' + (r['노선군']||'');
     const grp  = groupMap.get(gk) || [r];
     const diff = getDiffVia(r, grp);
-    const diffStr = diff.length ? `<span style="color:var(--text-3);font-size:10px">[${diff.join('→')}]</span> ` : '';
+    const diffStr = diff.length ? `<span style="color:var(--text-3);font-size:10px">[${diff.join('→')}]</span>` : '';
 
     const rJson = JSON.stringify(r).replace(/"/g,'&quot;');
     return `<div class="route-list-item${isActive?' active':''}" id="rli-${r['번호']}-${r['기점'].replace(/\s/g,'')}">
       <span class="bus-pill" style="background:${color};font-size:10px;padding:2px 5px;cursor:pointer" onclick="selectRoute(${rJson})">${num}</span>
-      <div class="rli-route" style="cursor:pointer" onclick="selectRoute(${rJson})">${diffStr}${r['기점']}→${r['종점']}</div>
+      <div class="rli-route" style="cursor:pointer" onclick="selectRoute(${rJson})">${r['기점']}${diffStr ? ' → ' + diffStr + ' → ' : ' → '}${r['종점']}</div>
       <div class="rli-count" style="cursor:pointer;color:var(--text-3);font-size:10px" onclick="showViaPopup(${rJson})">📍</div>
     </div>`;
   }).join('');
