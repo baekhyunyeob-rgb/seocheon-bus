@@ -49,8 +49,17 @@ function segMin(coords, fromIdx, toIdx, routeDist) {
   return Math.round(km * 2.5 + 3);
 }
 
+// ── GPS 위치 → 노선별 탑승 인덱스 ──
+// GPS일 때: 내 위치 500m 이내 가장 가까운 정류장
+// 없으면 해당 노선 이용 불가 (-1 반환)
+const GPS_BOARD_RADIUS = 300; // 탑승 허용 반경(m) — 도보 허용 거리 기준, findIdxByCoord 기본값과 동일
+
+function findGpsBoardIdx(coords, myLat, myLng) {
+  return findIdxByCoord(coords, myLat, myLng, GPS_BOARD_RADIUS);
+}
+
 // ── 직행 탐색 ──
-function searchDirect(fromName, toName, baseMin, dayType) {
+function searchDirect(fromName, fromGps, toName, baseMin, dayType) {
   const results = [];
   for (const route of ROUTES) {
     const coords = getRouteCoords(route);
@@ -59,8 +68,19 @@ function searchDirect(fromName, toName, baseMin, dayType) {
     const toIdx = findIdxByName(coords, toName);
     if (toIdx === -1) continue;
 
-    const fromIdx = fromName ? findIdxByName(coords, fromName) : 0;
-    if (fromName && fromIdx === -1) continue;
+    let fromIdx;
+    if (fromName) {
+      // 정류장 이름으로 탑승지 결정
+      fromIdx = findIdxByName(coords, fromName);
+      if (fromIdx === -1) continue;
+    } else if (fromGps) {
+      // GPS: 내 위치에서 가장 가까운 정류장
+      fromIdx = findGpsBoardIdx(coords, fromGps.lat, fromGps.lng);
+      if (fromIdx === -1) continue; // 500m 이내 정류장 없으면 이 노선 제외
+    } else {
+      fromIdx = 0;
+    }
+
     if (fromIdx >= toIdx) continue;
 
     const nextMin = getNextBusMin(route, baseMin, dayType);
@@ -79,7 +99,7 @@ function searchDirect(fromName, toName, baseMin, dayType) {
 }
 
 // ── 환승 탐색 ──
-function searchTransfer(fromName, toName, baseMin, dayType) {
+function searchTransfer(fromName, fromGps, toName, baseMin, dayType) {
   const results = [];
   const ck = getCountKey(dayType);
 
@@ -91,8 +111,16 @@ function searchTransfer(fromName, toName, baseMin, dayType) {
       if (c.length < 2) return false;
       const hi = findHubIdx(c, hubName);
       if (hi === -1) return false;
-      const fi = fromName ? findIdxByName(c, fromName) : 0;
-      if (fromName && fi === -1) return false;
+      let fi;
+      if (fromName) {
+        fi = findIdxByName(c, fromName);
+        if (fi === -1) return false;
+      } else if (fromGps) {
+        fi = findGpsBoardIdx(c, fromGps.lat, fromGps.lng);
+        if (fi === -1) return false;
+      } else {
+        fi = 0;
+      }
       return fi < hi;
     });
 
@@ -123,8 +151,16 @@ function searchTransfer(fromName, toName, baseMin, dayType) {
         const c1   = getRouteCoords(r1);
         const r1hi = findHubIdx(c1, hubName);
         if (r1hi === -1) continue;
-        const r1fi = fromName ? findIdxByName(c1, fromName) : 0;
-        if (fromName && r1fi === -1) continue;
+        let r1fi;
+        if (fromName) {
+          r1fi = findIdxByName(c1, fromName);
+          if (r1fi === -1) continue;
+        } else if (fromGps) {
+          r1fi = findGpsBoardIdx(c1, fromGps.lat, fromGps.lng);
+          if (r1fi === -1) continue;
+        } else {
+          r1fi = 0;
+        }
 
         const leg1min = segMin(c1, r1fi, r1hi, r1['거리']);
         const r1times = getRouteTimes(r1, dayType);
@@ -177,13 +213,15 @@ function searchTransfer(fromName, toName, baseMin, dayType) {
 function searchRoutes(fromState, toState, searchTime) {
   const dayType = getDayType();
   const baseMin = searchTime.getHours() * 60 + searchTime.getMinutes();
-  const fromName = fromState?.isGps ? null : (fromState?.name || null);
+  const isGps   = fromState?.isGps;
+  const fromName = isGps ? null : (fromState?.name || null);
+  const fromGps  = isGps ? { lat: fromState.lat, lng: fromState.lng } : null;
   const toName   = toState?.name || null;
   if (!toName) return [];
 
   const all = [
-    ...searchDirect(fromName, toName, baseMin, dayType),
-    ...searchTransfer(fromName, toName, baseMin, dayType),
+    ...searchDirect(fromName, fromGps, toName, baseMin, dayType),
+    ...searchTransfer(fromName, fromGps, toName, baseMin, dayType),
   ];
 
   all.sort((a, b) => {
