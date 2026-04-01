@@ -40,27 +40,70 @@ function findHubIdx(coords, hubName) {
   return findIdxByName(coords, hubName);
 }
 
-// 구간 소요시간 계산
-// routeDist 있으면: 누적 직선거리 비율 × 실제 노선 거리 (정확도 향상)
-// 없으면: 직선거리 fallback
-function segMin(coords, fromIdx, toIdx, routeDist) {
-  if (routeDist && coords[fromIdx]?.lat && coords[toIdx]?.lat) {
-    let totalStraight = 0, segStraight = 0;
-    for (let i = 0; i < coords.length - 1; i++) {
-      const a = coords[i], b = coords[i + 1];
-      if (!a?.lat || !b?.lat) continue;
-      const d = distM(a.lat, a.lng, b.lat, b.lng) / 1000;
-      totalStraight += d;
-      if (i >= fromIdx && i < toIdx) segStraight += d;
-    }
-    const ratio = totalStraight > 0 ? segStraight / totalStraight : 1;
-    return Math.round(routeDist * ratio * 2.5 + 3);
+// 구간 누적 직선거리 비율
+function segRatio(coords, fromIdx, toIdx) {
+  let total = 0, seg = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = coords[i], b = coords[i + 1];
+    if (!a?.lat || !b?.lat) continue;
+    const d = distM(a.lat, a.lng, b.lat, b.lng) / 1000;
+    total += d;
+    if (i >= fromIdx && i < toIdx) seg += d;
   }
-  const fc = coords[fromIdx], tc = coords[toIdx];
-  const km = (fc?.lat && tc?.lat)
-    ? distM(fc.lat, fc.lng, tc.lat, tc.lng) / 1000
-    : (routeDist || 10);
-  return Math.round(km * 2.5 + 3);
+  return total > 0 ? seg / total : (toIdx - fromIdx) / Math.max(coords.length - 1, 1);
+}
+
+// 구간 소요시간 계산
+// 1순위: timetable stops 통과시각 직접 차이
+// 2순위: timetable 전체 소요시간 × 구간 누적 직선거리 비율
+// 3순위: 구간 누적 직선거리 × 1.5 fallback
+function segMin(routeKey, coords, fromIdx, toIdx, routeDist, dayType) {
+  const ttData = TIMETABLE?.[routeKey];
+  const ttDay  = dayType || getDayType();
+
+  if (ttData && !ttData._source) {
+    const ttStops    = ttData.stops || [];
+    const rows       = ttData[ttDay] || ttData.weekday || [];
+    const coordNames = coords.map(c => c.name);
+
+    if (ttStops.length && rows.length) {
+      const fromName = coordNames[fromIdx] || null;
+      const toName   = coordNames[toIdx]   || null;
+      const fiTT = fromName ? ttStops.indexOf(fromName) : -1;
+      const tiTT = toName   ? ttStops.indexOf(toName)   : -1;
+
+      // 1순위: 두 정류장 모두 timetable에 있으면 통과시각 직접 사용
+      if (fiTT !== -1 && tiTT !== -1) {
+        const diffs = [];
+        for (const row of rows) {
+          if (!Array.isArray(row)) continue;
+          const mf = row[fiTT]?.includes?.(':') ? timeToMin(row[fiTT]) : null;
+          const mt = row[tiTT]?.includes?.(':') ? timeToMin(row[tiTT]) : null;
+          if (mf !== null && mt !== null && mt > mf) diffs.push(mt - mf);
+        }
+        if (diffs.length) return Math.round(diffs.reduce((a,b)=>a+b,0) / diffs.length);
+      }
+
+      // 2순위: timetable 전체 소요시간 × 구간 비율
+      const totalMins = [];
+      for (const row of rows) {
+        if (!Array.isArray(row)) continue;
+        const times = row.map(t => t?.includes?.(':') ? timeToMin(t) : null).filter(t => t !== null);
+        if (times.length >= 2) totalMins.push(times[times.length - 1] - times[0]);
+      }
+      if (totalMins.length) {
+        const avgTotal = totalMins.reduce((a,b)=>a+b,0) / totalMins.length;
+        return Math.max(1, Math.round(avgTotal * segRatio(coords, fromIdx, toIdx)));
+      }
+    }
+  }
+
+  // 3순위: 구간 누적 직선거리 × 1.5 fallback
+  const ratio  = segRatio(coords, fromIdx, toIdx);
+  const baseKm = routeDist
+    ? routeDist * ratio
+    : (() => { let s=0; for(let i=fromIdx;i<toIdx&&i<coords.length-1;i++){const a=coords[i],b=coords[i+1];if(a?.lat&&b?.lat)s+=distM(a.lat,a.lng,b.lat,b.lng)/1000;} return s; })();
+  return Math.max(1, Math.round(baseKm * 1.5 + 2));
 }
 
 // ── GPS 위치 → 노선별 탑승 인덱스 ──
@@ -100,7 +143,7 @@ function searchDirect(fromName, fromGps, toName, baseMin, dayType) {
     const nextMin = getNextBusMin(route, baseMin, dayType);
     if (nextMin === null) continue;
 
-    const mins = segMin(coords, fromIdx, toIdx, route['거리']);
+    const mins = segMin(String(route['번호'])+'_'+route['기점'], coords, fromIdx, toIdx, route['거리'], dayType);
     results.push({
       type: 'direct', route, coords,
       nextMin, boardMin: nextMin, arriveMin: nextMin + mins, minutes: mins,
@@ -157,7 +200,7 @@ function searchTransfer(fromName, fromGps, toName, baseMin, dayType) {
       const r2ti = findIdxByName(c2, toName);
       if (r2hi === -1 || r2ti === -1) continue;
 
-      const leg2min = segMin(c2, r2hi, r2ti, r2['거리']);
+      const leg2min = segMin(String(r2['번호'])+'_'+r2['기점'], c2, r2hi, r2ti, r2['거리'], dayType);
       const r2times = getRouteTimes(r2, dayType).filter(t => t >= baseMin);
       if (!r2times.length) continue;
 
@@ -176,7 +219,7 @@ function searchTransfer(fromName, fromGps, toName, baseMin, dayType) {
           r1fi = 0;
         }
 
-        const leg1min = segMin(c1, r1fi, r1hi, r1['거리']);
+        const leg1min = segMin(String(r1['번호'])+'_'+r1['기점'], c1, r1fi, r1hi, r1['거리'], dayType);
         const r1times = getRouteTimes(r1, dayType);
 
         for (const bus2dep of r2times) {
@@ -286,7 +329,7 @@ function findReturnRoute(toState, fromState, baseMin, dayType) {
       const c  = getRouteCoords(r);
       const fi = findIdxByName(c, retFromName);
       const ti = retToName ? findIdxByName(c, retToName) : c.length - 1;
-      const mins = segMin(c, fi, ti, r['거리']);
+      const mins = segMin(String(r['번호'])+'_'+r['기점'], c, fi, ti, r['거리'], dayType);
       return {
         type: 'direct', route: r, coords: c,
         nextMin, boardMin: nextMin, arriveMin: nextMin + mins, minutes: mins,
@@ -330,8 +373,8 @@ function findReturnRoute(toState, fromState, baseMin, dayType) {
     const ti  = retToName ? findIdxByName(c2, retToName) : c2.length - 1;
     const nextMin = getNextBusMin(r1, baseMin, dayType);
     if (nextMin === null) continue;
-    const l1min = segMin(c1, fi, hi1, r1['거리']);
-    const l2min = segMin(c2, hi2, ti,  r2['거리']);
+    const l1min = segMin(String(r1['번호'])+'_'+r1['기점'], c1, fi, hi1, r1['거리'], dayType);
+    const l2min = segMin(String(r2['번호'])+'_'+r2['기점'], c2, hi2, ti, r2['거리'], dayType);
     const hubMin = nextMin + l1min;
     const arrMin = hubMin  + l2min;
     return {

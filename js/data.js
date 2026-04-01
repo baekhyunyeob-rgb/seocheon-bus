@@ -186,7 +186,7 @@ function buildDisplayNames(stops) {
 
 // ==================== 유틸리티 ====================
 function distM(lat1,lng1,lat2,lng2){
-  return Math.sqrt((lat1-lat2)**2+(lng1-lng2)**2)*111000;
+  const cosLat=Math.cos((lat1+lat2)/2*Math.PI/180); return Math.sqrt((lat1-lat2)**2+((lng1-lng2)*cosLat)**2)*111000;
 }
 
 function timeToMin(t){
