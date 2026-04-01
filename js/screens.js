@@ -406,7 +406,7 @@ function initRoutesScreen() {
 function renderZoneLegend() {
   const el = document.getElementById('zone-pills');
   if (!el) return;
-  el.innerHTML = ZONES.filter(z => z.id !== 'outer').map(z =>
+  el.innerHTML = ZONES.slice(0,4).map(z =>
     `<div class="zone-badge" id="zone-pill-${z.id}" onclick="filterByZone('${z.id}')"
       style="background:${z.color}">
       <span>${z.name}</span>
@@ -426,6 +426,85 @@ function filterByZone(zoneId) {
   STATE.selectedRoute = null;
 }
 
+// ── 경유지 텍스트 파싱 ──────────────────────────────────────
+// 괄호·특수기호 제거 후 정류장 배열 반환
+function parseViaStops(viaText) {
+  const text = (viaText || '').replace(/\([^)]*\)/g, '');
+  return text.split(/[→↔/←]/).map(s => s.trim()).filter(Boolean);
+}
+
+// 노선그룹 내 공통 앞부분 길이 계산 (캐시)
+const _viaCommonCache = new Map();
+function getCommonPrefixLen(routes) {
+  const key = routes.map(r => r['번호']).join(',');
+  if (_viaCommonCache.has(key)) return _viaCommonCache.get(key);
+  const lists = routes.map(r => parseViaStops(r['경유']));
+  let len = 0;
+  outer: for (let i = 0; i < Math.min(...lists.map(l => l.length)); i++) {
+    const val = lists[0][i];
+    for (const l of lists) { if (l[i] !== val) break outer; }
+    len++;
+  }
+  _viaCommonCache.set(key, len);
+  return len;
+}
+
+// 노선의 "차이 경유지" 1~2개 반환
+function getDiffVia(route, sameGroupRoutes) {
+  const via = parseViaStops(route['경유']);
+  if (sameGroupRoutes.length <= 1) {
+    // 단독 노선: 중간 경유지 1~2개
+    const mid = via.filter(v => v !== route['기점'] && v !== route['종점']);
+    return mid.slice(1, 3);
+  }
+  const commonLen = getCommonPrefixLen(sameGroupRoutes);
+  const diff = via.slice(commonLen).filter(v => v !== route['종점']);
+  return diff.slice(0, 2);
+}
+
+// 전체 경유지 팝업 표시
+function showViaPopup(route) {
+  // 기존 팝업 제거
+  const existing = document.getElementById('via-popup');
+  if (existing) { existing.remove(); return; }
+
+  const via = parseViaStops(route['경유']);
+  const allStops = [route['기점'], ...via, route['종점']];
+  // 중복 제거
+  const unique = allStops.filter((v,i,a) => a.indexOf(v) === i);
+
+  const popup = document.createElement('div');
+  popup.id = 'via-popup';
+  popup.style.cssText = [
+    'position:absolute', 'top:8px', 'left:8px', 'z-index:50',
+    'background:rgba(255,255,255,0.96)', 'border-radius:10px',
+    'padding:10px 12px', 'max-width:calc(100% - 16px)',
+    'box-shadow:0 2px 12px rgba(0,0,0,.18)',
+    'font-size:11px', 'line-height:1.7', 'color:var(--text-1)',
+    'pointer-events:auto',
+  ].join(';');
+
+  const color = getZoneColor(route);
+  const num   = getBusNum(route);
+  popup.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="bus-pill" style="background:${color};font-size:10px;padding:2px 6px">${num}</span>
+        <span style="font-weight:600;font-size:12px">${route['기점']} → ${route['종점']}</span>
+      </div>
+      <button onclick="document.getElementById('via-popup')?.remove()"
+        style="background:none;border:none;padding:2px 4px;cursor:pointer;color:var(--text-3);font-size:14px;line-height:1">✕</button>
+    </div>
+    <div style="color:var(--text-2)">${unique.join(' → ')}</div>`;
+
+  // 지도 컨테이너 위에 절대 위치
+  const mapEl = document.getElementById('map-routes');
+  if (mapEl) {
+    mapEl.style.position = 'relative';
+    mapEl.appendChild(popup);
+  }
+}
+
 function renderRouteList(zoneId) {
   const el = document.getElementById('route-list');
   if (!el) return;
@@ -440,22 +519,36 @@ function renderRouteList(zoneId) {
     if (zone) filtered = filtered.filter(r => getZoneId(r) === zoneId);
   }
 
+  // 같은 번호대+기점 그룹 미리 계산
+  const groupMap = new Map();
+  filtered.forEach(r => {
+    const gk = (Math.floor((parseInt(r['번호'])||0) / 10) * 10) + '|' + r['기점'];
+    if (!groupMap.has(gk)) groupMap.set(gk, []);
+    groupMap.get(gk).push(r);
+  });
+
   el.innerHTML = filtered.map(r => {
-    const color = getZoneColor(r);
-    const num   = getBusNum(r);
-    const via   = [r['기점'], ...r['경유'].split('→').filter(Boolean).slice(0,2), r['종점']].join('→');
-    const ck    = getCountKey(getDayType());
-    const ttKey = r['번호'] + '_' + r['기점'];
-    const tt    = TIMETABLE[ttKey];
-    const ttDay = getDayType();
-    const cnt   = tt
+    const color  = getZoneColor(r);
+    const num    = getBusNum(r);
+    const ttKey  = r['번호'] + '_' + r['기점'];
+    const tt     = TIMETABLE[ttKey];
+    const ttDay  = getDayType();
+    const cnt    = tt
       ? (tt[ttDay] || tt['weekday'] || []).length
-      : (r[ck] || 0);
+      : (r[getCountKey(getDayType())] || 0);
     const isActive = STATE.selectedRoute?.['번호']===r['번호'] && STATE.selectedRoute?.['기점']===r['기점'];
-    return `<div class="route-list-item${isActive?' active':''}" id="rli-${r['번호']}-${r['기점'].replace(/\s/g,'')}" onclick="selectRoute(${JSON.stringify(r).replace(/"/g,'&quot;')})">
-      <span class="bus-pill" style="background:${color};font-size:10px;padding:2px 5px">${num}</span>
-      <div class="rli-route">${via}</div>
-      <div class="rli-count">${cnt}회</div>
+
+    // 차이 경유지
+    const gk = (Math.floor((parseInt(r['번호'])||0) / 10) * 10) + '|' + r['기점'];
+    const grp  = groupMap.get(gk) || [r];
+    const diff = getDiffVia(r, grp);
+    const diffStr = diff.length ? `<span style="color:var(--text-3);font-size:10px">[${diff.join('→')}]</span> ` : '';
+
+    const rJson = JSON.stringify(r).replace(/"/g,'&quot;');
+    return `<div class="route-list-item${isActive?' active':''}" id="rli-${r['번호']}-${r['기점'].replace(/\s/g,'')}">
+      <span class="bus-pill" style="background:${color};font-size:10px;padding:2px 5px;cursor:pointer" onclick="selectRoute(${rJson})">${num}</span>
+      <div class="rli-route" style="cursor:pointer" onclick="selectRoute(${rJson})">${diffStr}${r['기점']}→${r['종점']}</div>
+      <div class="rli-count" style="cursor:pointer;color:var(--text-3);font-size:10px" onclick="showViaPopup(${rJson})">📍</div>
     </div>`;
   }).join('');
 }

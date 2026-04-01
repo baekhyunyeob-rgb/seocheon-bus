@@ -40,8 +40,22 @@ function findHubIdx(coords, hubName) {
   return findIdxByName(coords, hubName);
 }
 
-// 구간 소요시간 계산 (직선거리 기반 추정)
+// 구간 소요시간 계산
+// routeDist 있으면: 누적 직선거리 비율 × 실제 노선 거리 (정확도 향상)
+// 없으면: 직선거리 fallback
 function segMin(coords, fromIdx, toIdx, routeDist) {
+  if (routeDist && coords[fromIdx]?.lat && coords[toIdx]?.lat) {
+    let totalStraight = 0, segStraight = 0;
+    for (let i = 0; i < coords.length - 1; i++) {
+      const a = coords[i], b = coords[i + 1];
+      if (!a?.lat || !b?.lat) continue;
+      const d = distM(a.lat, a.lng, b.lat, b.lng) / 1000;
+      totalStraight += d;
+      if (i >= fromIdx && i < toIdx) segStraight += d;
+    }
+    const ratio = totalStraight > 0 ? segStraight / totalStraight : 1;
+    return Math.round(routeDist * ratio * 2.5 + 3);
+  }
   const fc = coords[fromIdx], tc = coords[toIdx];
   const km = (fc?.lat && tc?.lat)
     ? distM(fc.lat, fc.lng, tc.lat, tc.lng) / 1000
@@ -166,7 +180,7 @@ function searchTransfer(fromName, fromGps, toName, baseMin, dayType) {
         const r1times = getRouteTimes(r1, dayType);
 
         for (const bus2dep of r2times) {
-          const needHubBy = bus2dep - 5;
+          const needHubBy = bus2dep - 10;
           let bestBus1 = null;
           for (const dep of r1times) {
             if (dep < baseMin) continue;
@@ -224,15 +238,16 @@ function searchRoutes(fromState, toState, searchTime) {
     ...searchTransfer(fromName, fromGps, toName, baseMin, dayType),
   ];
 
+  // 도착시각 기준 정렬 — 가장 빨리 도착하는 경로를 추천
+  // 도착시각 동일하면 소요시간 짧은 순, 그것도 같으면 직행 우선
   all.sort((a, b) => {
-    if (a.type !== b.type) {
-      const gap = (a.type === 'direct' ? a.boardMin : b.boardMin)
-                - (a.type === 'direct' ? b.boardMin : a.boardMin);
-      if (Math.abs(gap) > 30) return a.type === 'direct' ? -1 : 1;
-      return a.type === 'direct' ? -1 : 1;
-    }
-    if (Math.abs(a.boardMin - b.boardMin) > 3) return a.boardMin - b.boardMin;
-    return a.minutes - b.minutes;
+    const arrDiff = a.arriveMin - b.arriveMin;
+    if (Math.abs(arrDiff) > 3) return arrDiff;
+    const minDiff = a.minutes - b.minutes;
+    if (Math.abs(minDiff) > 3) return minDiff;
+    // 도착/소요 동일하면 직행 우선
+    if (a.type !== b.type) return a.type === 'direct' ? -1 : 1;
+    return a.boardMin - b.boardMin;
   });
 
   return all.slice(0, 3);
