@@ -203,7 +203,8 @@
       <div class="modal-scroll" style="padding:12px 14px">
         <p style="font-size:12px;color:var(--text-2);line-height:1.6;margin:0 0 14px">
           카카오 개발자 콘솔에서 발급받은 REST API 키를 입력하세요.<br>
-          키는 이 기기에만 저장되며 서버로 전송되지 않습니다.
+          키는 이 기기에만 저장되며 서버로 전송되지 않습니다.<br>
+          <span style="color:#A32D2D;font-weight:500">※ 미입력 시 도로 경로 대신 직선 경로로 표시됩니다.</span>
         </p>
         <div style="margin-bottom:16px">
           <label style="font-size:11px;font-weight:600;color:var(--text-2)">REST API 키 (경로 탐색용)</label>
@@ -273,8 +274,8 @@ function goToMyLocation() {
 }
 </script>
 
-<!-- 카카오맵 SDK -->
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&autoload=false&libraries=services,clusterer"></script>
+<!-- 카카오맵 SDK — JS 키는 vercel.json rewrites 프록시를 통해 서버에서 주입 -->
+<script src="/kakao-map-sdk.js?autoload=false&libraries=services,clusterer"></script>
 
 <!-- 저장된 카카오 키 불러오기 -->
 <script>
