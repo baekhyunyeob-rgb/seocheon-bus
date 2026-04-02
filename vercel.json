@@ -1,10 +1,4 @@
 {
-  "rewrites": [
-    {
-      "source": "/kakao-map-sdk.js",
-      "destination": "https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",

@@ -274,8 +274,8 @@ function goToMyLocation() {
 }
 </script>
 
-<!-- 카카오맵 SDK — JS 키는 vercel.json rewrites 프록시를 통해 서버에서 주입 -->
-<script src="/kakao-map-sdk.js?autoload=false&libraries=services,clusterer"></script>
+<!-- 카카오맵 SDK (JS 키는 카카오 콘솔 도메인 화이트리스트로 보호) -->
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&autoload=false&libraries=services,clusterer"></script>
 
 <!-- 저장된 카카오 키 불러오기 -->
 <script>
