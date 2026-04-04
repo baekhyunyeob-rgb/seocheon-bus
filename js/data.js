@@ -1,11 +1,9 @@
 'use strict';
 
 // ==================== 상수 ====================
-// ⚠️  API 키는 소스코드에 직접 쓰지 않습니다.
-//    JS 키  → index.html이 /kakao-map-sdk 프록시를 통해 로드 (vercel.json rewrites)
-//    REST 키 → 사용자가 ⚙ 설정 화면에서 직접 입력 → localStorage 저장
-//              maps.js는 localStorage('sc_kakao_rest_key')에서만 읽습니다.
-const KAKAO_REST_KEY = null; // 절대 여기에 키를 넣지 마세요
+// 카카오맵 JS 키 (지도 표시용 — index.html의 SDK 로드에도 동일하게 사용)
+const KAKAO_JS_KEY   = 'ea4bdbbdf5c627aba4db0a4b163c9b0d';
+const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
 
 const SEOCHEON_BOUNDS = { minLat:35.97, maxLat:36.22, minLng:126.49, maxLng:126.89 };
 

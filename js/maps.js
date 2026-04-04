@@ -46,12 +46,7 @@ async function fetchRoadPolyline(stops) {
     if (i + ROAD_CHUNK >= stops.length) break;
   }
 
-  const restKey = localStorage.getItem('sc_kakao_rest_key');
-  if (!restKey) {
-    // REST 키 미설정 시 직선 경로로 fallback (지도는 정상 표시됨)
-    console.info('[지도] REST API 키 미설정 → 직선 경로로 표시합니다. ⚙ 설정에서 키를 입력하면 도로 경로로 바뀝니다.');
-    return stops.map(s => ({ lat: s.lat, lng: s.lng }));
-  }
+  const restKey = localStorage.getItem('sc_kakao_rest_key') || KAKAO_REST_KEY;
   let polyline = [];
 
   for (let si = 0; si < segments.length; si += ROAD_CONCURRENCY) {
@@ -128,7 +123,6 @@ function initHomeMap() {
     center: new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng),
     level: 8,
   });
-
   STATE.mapHome.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
 
   let stopOverlays = [], lastLevel = 8;

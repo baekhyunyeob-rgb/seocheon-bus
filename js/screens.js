@@ -81,63 +81,29 @@ function searchPlaceKakao(keyword, container) {
 }
 
 function renderStopResults(results, container, append=false) {
-  // XSS 방지: 외부 데이터(정류장명 등)는 textContent로만 삽입
-  if (!append) {
-    container.innerHTML = '';
-    const label = document.createElement('div');
-    label.className = 'modal-section-label';
-    label.textContent = '정류장 검색 결과';
-    container.appendChild(label);
-  }
-
-  results.forEach(s => {
-    const disp = s.displayName || s.name;
-    const placeObj = { name: s.name, displayName: disp, lat: s.lat, lng: s.lng };
-    const isSaved = STATE.savedPlaces.some(p => p.name === s.name);
-
-    // 아이템 wrapper
-    const item = document.createElement('div');
-    item.className = 'modal-item';
-    item.style.position = 'relative';
-
-    // 아이콘 + 클릭 영역
-    const icon = document.createElement('div');
-    icon.className = 'modal-item-icon';
-    icon.style.background = 'var(--green-l)';
-    icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#1D9E75"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>';
-    icon.addEventListener('click', () => selectPlace(_placeTarget, placeObj));
-
-    // 텍스트 영역
-    const textWrap = document.createElement('div');
-    textWrap.style.cssText = 'flex:1;min-width:0';
-    textWrap.addEventListener('click', () => selectPlace(_placeTarget, placeObj));
-
-    const nameEl = document.createElement('div');
-    nameEl.className = 'modal-item-name';
-    nameEl.textContent = disp; // ✅ textContent — XSS 안전
-    textWrap.appendChild(nameEl);
-
-    if (disp !== s.name) {
-      const subEl = document.createElement('div');
-      subEl.className = 'modal-item-sub';
-      subEl.textContent = s.name; // ✅ textContent — XSS 안전
-      textWrap.appendChild(subEl);
-    }
-
-    // 즐겨찾기 버튼
+  const html = results.map(s => {
+    const disp = s.displayName||s.name;
+    const diffName = disp!==s.name ? `<div class="modal-item-sub">${s.name}</div>` : '';
+    const placeData = JSON.stringify({name:s.name,displayName:disp,lat:s.lat,lng:s.lng}).replace(/"/g,'&quot;');
+    const isSaved = STATE.savedPlaces.some(p => p.name===s.name);
     const starColor = isSaved ? '#EF9F27' : '#ccc';
     const starFill  = isSaved ? '#EF9F27' : 'none';
-    const btn = document.createElement('button');
-    btn.style.cssText = 'background:none;border:none;padding:4px 6px;cursor:pointer;flex-shrink:0';
-    btn.title = isSaved ? '즐겨찾기 해제' : '즐겨찾기 등록';
-    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 18 18" fill="${starFill}" stroke="${starColor}" stroke-width="1.4"><path d="M9 1.5l2.09 4.24 4.68.68-3.39 3.3.8 4.67L9 12.02l-4.18 2.37.8-4.67L2.23 6.42l4.68-.68z" stroke-linejoin="round"/></svg>`;
-    btn.addEventListener('click', () => toggleSavePlace(placeObj, btn));
-
-    item.appendChild(icon);
-    item.appendChild(textWrap);
-    item.appendChild(btn);
-    container.appendChild(item);
-  });
+    return `<div class="modal-item" style="position:relative">
+      <div class="modal-item-icon" style="background:var(--green-l)" onclick="selectPlace('${_placeTarget}',${placeData})">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1C4.8 1 3 2.8 3 5c0 3.2 4 8 4 8s4-4.8 4-8c0-2.2-1.8-4-4-4z" fill="#1D9E75"/><circle cx="7" cy="5" r="1.5" fill="#fff"/></svg>
+      </div>
+      <div style="flex:1;min-width:0" onclick="selectPlace('${_placeTarget}',${placeData})">
+        <div class="modal-item-name">${disp}</div>${diffName}
+      </div>
+      <button onclick="toggleSavePlace(${placeData},this)" style="background:none;border:none;padding:4px 6px;cursor:pointer;flex-shrink:0" title="즐겨찾기 ${isSaved?'해제':'등록'}">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="${starFill}" stroke="${starColor}" stroke-width="1.4">
+          <path d="M9 1.5l2.09 4.24 4.68.68-3.39 3.3.8 4.67L9 12.02l-4.18 2.37.8-4.67L2.23 6.42l4.68-.68z" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>`;
+  }).join('');
+  if (append) container.innerHTML += html;
+  else container.innerHTML = `<div class="modal-section-label">정류장 검색 결과</div>${html}`;
 }
 
 function toggleSavePlace(place, btn) {
