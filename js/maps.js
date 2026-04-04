@@ -128,6 +128,7 @@ function initHomeMap() {
     center: new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng),
     level: 8,
   });
+
   STATE.mapHome.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
 
   let stopOverlays = [], lastLevel = 8;
