@@ -89,6 +89,16 @@ a { text-decoration: none; }
   position: relative;
 }
 
+/* ✅ [수정] 홈 지도: height:100%가 모바일(iOS/Android)에서 0으로 계산되는 문제 수정
+   부모가 flex:1이어도 height 값이 없으면 자식 height:100%는 0이 됨
+   → position:absolute + inset:0 으로 부모를 꽉 채우는 방식으로 변경 */
+#map-home {
+  position: absolute !important;
+  top: 0; right: 0; bottom: 0; left: 0;
+  height: auto !important;  /* inline style height:100% 무력화 */
+  width: 100%;
+}
+
 /* ===== 페이지 헤더 ===== */
 .page-header {
   display: flex;

@@ -21,7 +21,7 @@
   <!-- ==================== 홈 화면 ==================== -->
   <div id="screen-home" class="screen active">
     <div style="position:relative;flex:1;min-height:0">
-      <div id="map-home" class="map-container" style="height:100%"></div>
+      <div id="map-home" class="map-container"></div>
       <button class="my-loc-btn" onclick="goToMyLocation()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="#185FA5" stroke-width="1.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15" stroke="#185FA5" stroke-width="1.5" stroke-linecap="round"/></svg>
       </button>
@@ -218,6 +218,10 @@
 </div><!-- /#app -->
 
 <!-- JS 모듈 -->
+<!-- ✅ [수정] 카카오맵 SDK를 앱 JS보다 먼저 동기 로드 (parser-blocking 보장) -->
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&libraries=services,clusterer&autoload=false"></script>
+
+<!-- JS 모듈 -->
 <script src="js/data.js"></script>
 <script src="js/routeCoords.js"></script>
 <script src="js/search.js"></script>
@@ -225,8 +229,6 @@
 <script src="js/ui.js"></script>
 <script src="js/screens.js"></script>
 
-<!-- ✅ [수정] 카카오맵 SDK: autoload=false 추가 → kakao.maps.load() 콜백으로 초기화 타이밍 보장 -->
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&libraries=services,clusterer&autoload=false"></script>
 
 <!-- 저장된 카카오 REST 키 복원 -->
 <script>
