@@ -1,25 +1,11 @@
 'use strict';
 
-// ==================== 디버그 오버레이 (임시) ====================
-function _dbg(msg) {
-  let el = document.getElementById('_debug_overlay');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = '_debug_overlay';
-    el.style.cssText = 'position:fixed;bottom:80px;left:8px;right:8px;z-index:99999;background:rgba(0,0,0,0.85);color:#fff;font-size:11px;padding:8px 10px;border-radius:8px;line-height:1.6;max-height:200px;overflow-y:auto;word-break:break-all';
-    document.body.appendChild(el);
-  }
-  el.innerHTML += msg + '<br>';
-}
-
 // ==================== 카카오맵 로드 ====================
 function loadKakaoMap() {
   if (typeof kakao === 'undefined' || typeof kakao.maps === 'undefined') {
     if (!loadKakaoMap._retryCount) loadKakaoMap._retryCount = 0;
     loadKakaoMap._retryCount++;
-    _dbg('kakao 미로드 retry=' + loadKakaoMap._retryCount);
     if (loadKakaoMap._retryCount > 10) {
-      _dbg('❌ kakao SDK 로드 실패');
       const ex = document.getElementById('map-error-banner');
       if (!ex) {
         const banner = document.createElement('div');
@@ -37,27 +23,10 @@ function loadKakaoMap() {
     }
     setTimeout(loadKakaoMap, 500); return;
   }
-  _dbg('✅ kakao SDK 로드 성공 / kakao.maps 존재: ' + (typeof kakao.maps));
-  try {
-    kakao.maps.load(async () => {
-      _dbg('✅ kakao.maps.load 콜백 진입');
-      try {
-        initHomeMap();
-        _dbg('✅ initHomeMap 완료');
-      } catch(e) {
-        _dbg('❌ initHomeMap 오류: ' + e.message);
-      }
-      try {
-        await buildRouteCoords();
-        _dbg('✅ buildRouteCoords 완료');
-      } catch(e) {
-        _dbg('❌ buildRouteCoords 오류: ' + e.message);
-      }
-    });
-    _dbg('kakao.maps.load 호출 완료 (콜백 대기중)');
-  } catch(e) {
-    _dbg('❌ kakao.maps.load 오류: ' + e.message);
-  }
+  kakao.maps.load(async () => {
+    initHomeMap();
+    await buildRouteCoords();
+  });
 }
 
 // ==================== 도로 Polyline (Lazy 로드) ====================
