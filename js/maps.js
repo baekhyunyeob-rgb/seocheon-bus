@@ -37,14 +37,27 @@ function loadKakaoMap() {
     }
     setTimeout(loadKakaoMap, 500); return;
   }
-  _dbg('✅ kakao SDK 로드 성공');
-  kakao.maps.load(async () => {
-    _dbg('✅ kakao.maps.load 콜백 진입');
-    initHomeMap();
-    _dbg('✅ initHomeMap 완료');
-    await buildRouteCoords();
-    _dbg('✅ buildRouteCoords 완료');
-  });
+  _dbg('✅ kakao SDK 로드 성공 / kakao.maps 존재: ' + (typeof kakao.maps));
+  try {
+    kakao.maps.load(async () => {
+      _dbg('✅ kakao.maps.load 콜백 진입');
+      try {
+        initHomeMap();
+        _dbg('✅ initHomeMap 완료');
+      } catch(e) {
+        _dbg('❌ initHomeMap 오류: ' + e.message);
+      }
+      try {
+        await buildRouteCoords();
+        _dbg('✅ buildRouteCoords 완료');
+      } catch(e) {
+        _dbg('❌ buildRouteCoords 오류: ' + e.message);
+      }
+    });
+    _dbg('kakao.maps.load 호출 완료 (콜백 대기중)');
+  } catch(e) {
+    _dbg('❌ kakao.maps.load 오류: ' + e.message);
+  }
 }
 
 // ==================== 도로 Polyline (Lazy 로드) ====================
