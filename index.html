@@ -21,7 +21,7 @@
   <!-- ==================== 홈 화면 ==================== -->
   <div id="screen-home" class="screen active">
     <div style="position:relative;flex:1;min-height:0">
-      <div id="map-home" class="map-container"></div>
+      <div id="map-home" class="map-container" style="height:100%"></div>
       <button class="my-loc-btn" onclick="goToMyLocation()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="#185FA5" stroke-width="1.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15" stroke="#185FA5" stroke-width="1.5" stroke-linecap="round"/></svg>
       </button>
@@ -218,10 +218,6 @@
 </div><!-- /#app -->
 
 <!-- JS 모듈 -->
-<!-- ✅ [수정] 카카오맵 SDK를 앱 JS보다 먼저 동기 로드 (parser-blocking 보장) -->
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&libraries=services,clusterer&autoload=false"></script>
-
-<!-- JS 모듈 -->
 <script src="js/data.js"></script>
 <script src="js/routeCoords.js"></script>
 <script src="js/search.js"></script>
@@ -229,27 +225,14 @@
 <script src="js/ui.js"></script>
 <script src="js/screens.js"></script>
 
-
-<!-- 저장된 카카오 REST 키 복원 -->
-<script>
-(function() {
-  const savedRest = localStorage.getItem('sc_kakao_rest_key');
-  if (savedRest) window._kakaoRestKey = savedRest;
-})();
-</script>
-
 <!-- 앱 초기화 -->
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
   await loadData();
-  renderAllTabbars();
+  renderAllTabbars();  // 탭바 최초 렌더링
   initLocation();
   initRoutesScreen();
-
-  // ✅ [수정] SDK 완전 로드 후 지도 초기화 (autoload=false 콜백 사용)
-  kakao.maps.load(() => {
-    loadKakaoMap();
-  });
+  loadKakaoMap();
 
   history.replaceState({ screen:'home' }, '', '');
   window.addEventListener('popstate', e => {
@@ -282,11 +265,23 @@ function goToMyLocation() {
       if (ex) ex.remove();
     }
   }, () => {
+    // GPS 실패 시 기존 위치로 이동
     if (STATE.mapHome && STATE.myLocation) {
       STATE.mapHome.panTo(new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng));
     }
   });
 }
+</script>
+
+<!-- 카카오맵 SDK -->
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&autoload=false&libraries=services,clusterer"></script>
+
+<!-- 저장된 카카오 키 불러오기 -->
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  const savedRest = localStorage.getItem('sc_kakao_rest_key');
+  if (savedRest) window._kakaoRestKey = savedRest;
+});
 </script>
 
 <!-- Service Worker 등록 -->
@@ -295,6 +290,7 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then(reg => {
+        // 새 버전 감지 시 사용자에게 업데이트 안내
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
           newWorker.addEventListener('statechange', () => {
@@ -305,6 +301,7 @@ if ('serviceWorker' in navigator) {
         });
       });
 
+    // 업데이트 후 새로고침 (새 SW가 claim하면 자동 reload)
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) { refreshing = true; location.reload(); }
