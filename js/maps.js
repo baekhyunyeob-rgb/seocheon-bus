@@ -23,11 +23,10 @@ function loadKakaoMap() {
     }
     setTimeout(loadKakaoMap, 500); return;
   }
-  // autoload=true 방식: SDK 로드 완료 후 바로 초기화
-  (async () => {
+  kakao.maps.load(async () => {
     initHomeMap();
     await buildRouteCoords();
-  })();
+  });
 }
 
 // ==================== 도로 Polyline (Lazy 로드) ====================
