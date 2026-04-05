@@ -23,10 +23,10 @@ function loadKakaoMap() {
     }
     setTimeout(loadKakaoMap, 500); return;
   }
-  kakao.maps.load(async () => {
+  (async () => {
     initHomeMap();
     await buildRouteCoords();
-  });
+  })();
 }
 
 // ==================== 도로 Polyline (Lazy 로드) ====================
@@ -330,7 +330,7 @@ function initRoutesMap() {
   const el = document.getElementById('map-routes');
   if (!el) return;
   if (typeof kakao === 'undefined' || !kakao.maps) { setTimeout(initRoutesMap, 300); return; }
-  kakao.maps.load(() => {
+  (() => {
     if (STATE.mapRoutes) return;
     STATE.mapRoutes = new kakao.maps.Map(el, {
       center: new kakao.maps.LatLng(36.0758, 126.6908), level: 10,
@@ -338,7 +338,7 @@ function initRoutesMap() {
     if (STATE.selectedRoute) {
       showRouteOnMap(STATE.selectedRoute, STATE.timetableSearchStop || null);
     }
-  });
+  })();
 }
 
 function showRouteOnMap(route, searchStop) {
