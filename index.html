@@ -13,6 +13,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+
+<!-- 카카오맵 SDK: autoload=false 로 동기 로드 후 kakao.maps.load() 콜백에서만 초기화 -->
+<!-- JS 키는 data.js의 KAKAO_JS_KEY 상수에서 읽어 동적으로 삽입 (HTML에 하드코딩 없음) -->
+<script>
+(function() {
+  // data.js보다 먼저 실행되므로 window에 임시 저장, data.js 로드 후 SDK 주입
+  window._kakaoSdkReady = false;
+  window._kakaoSdkCallbacks = [];
+})();
+</script>
 </head>
 <body>
 
@@ -21,7 +31,7 @@
   <!-- ==================== 홈 화면 ==================== -->
   <div id="screen-home" class="screen active">
     <div style="position:relative;flex:1;min-height:0">
-      <div id="map-home" class="map-container" style="height:100%"></div>
+      <div id="map-home" class="map-container"></div>
       <button class="my-loc-btn" onclick="goToMyLocation()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="#185FA5" stroke-width="1.5"/><path d="M8 1v2.5M8 12.5V15M1 8h2.5M12.5 8H15" stroke="#185FA5" stroke-width="1.5" stroke-linecap="round"/></svg>
       </button>
@@ -225,6 +235,17 @@
 <script src="js/ui.js"></script>
 <script src="js/screens.js"></script>
 
+<!-- data.js 로드 완료 후 KAKAO_JS_KEY로 SDK 동적 삽입 -->
+<script>
+(function() {
+  var s = document.createElement('script');
+  s.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + KAKAO_JS_KEY + '&autoload=false&libraries=services,clusterer';
+  s.onload = function() { window._kakaoSdkReady = true; };
+  document.head.appendChild(s);
+})();
+</script>
+
+
 <!-- 앱 초기화 -->
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
@@ -273,16 +294,8 @@ function goToMyLocation() {
 }
 </script>
 
-<!-- 카카오맵 SDK -->
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=ea4bdbbdf5c627aba4db0a4b163c9b0d&autoload=false&libraries=services,clusterer"></script>
 
-<!-- 저장된 카카오 키 불러오기 -->
-<script>
-window.addEventListener('DOMContentLoaded', () => {
-  const savedRest = localStorage.getItem('sc_kakao_rest_key');
-  if (savedRest) window._kakaoRestKey = savedRest;
-});
-</script>
+
 
 <!-- Service Worker 등록 -->
 <script>

@@ -1,7 +1,12 @@
 'use strict';
 
 // ==================== 상수 ====================
-// 카카오맵 JS 키 (지도 표시용 — index.html의 SDK 로드에도 동일하게 사용)
+// [보안 설계]
+//  · KAKAO_JS_KEY  : 지도 표시용. index.html이 이 변수를 읽어 SDK를 동적 로드.
+//                    → HTML에 키가 직접 노출되지 않음.
+//  · KAKAO_REST_KEY: 경로 탐색(Directions API)용.
+//                    사용자가 설정 모달에서 입력하면 localStorage에 저장되어 우선 적용됨.
+//                    기본값은 이 파일 한 곳에만 존재.
 const KAKAO_JS_KEY   = 'ea4bdbbdf5c627aba4db0a4b163c9b0d';
 const KAKAO_REST_KEY = 'a0aa52b4b6223f8d5f132191663cac66';
 
