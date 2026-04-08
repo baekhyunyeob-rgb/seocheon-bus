@@ -116,26 +116,9 @@ function _initHomeMap() {
   const el = document.getElementById('map-home');
   if (!el) { _showMapError('map-home 엘리먼트 없음'); return; }
 
-  // ── 모바일 height 보정 ──────────────────────────────────────────────
-  // flex:1 부모 안에서 height:100% / position:absolute 모두
-  // iOS Safari · Android WebView에서 0이 될 수 있음.
-  // 부모의 실제 픽셀 높이를 읽어 직접 지정하는 것이 가장 안전.
-  function applyHeight() {
-    const parent = el.parentElement;
-    if (!parent) return;
-    const h = parent.getBoundingClientRect().height;
-    if (h > 0) {
-      el.style.height = h + 'px';
-      el.style.position = 'absolute';
-      el.style.top = '0'; el.style.left = '0'; el.style.right = '0';
-      // height를 px로 지정했으니 bottom은 필요 없음
-      if (STATE.mapHome) STATE.mapHome.relayout();
-    } else {
-      // 레이아웃 미완료 시 재시도
-      requestAnimationFrame(applyHeight);
-    }
-  }
-  applyHeight();
+  // CSS: #map-home { position:absolute; top:0;left:0;right:0;bottom:0 }
+  // 인라인 height 없음 → top/bottom:0 으로 높이 자동 결정
+  // 지도 생성 후 relayout()으로 크기 재계산 강제 (모바일 타이밍 대응)
 
   STATE.mapHome = new kakao.maps.Map(el, {
     center: new kakao.maps.LatLng(STATE.myLocation.lat, STATE.myLocation.lng),
@@ -143,9 +126,15 @@ function _initHomeMap() {
   });
   STATE.mapHome.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
 
+  // 지도 생성 직후 relayout — 모바일에서 컨테이너 크기 재계산 강제
+  requestAnimationFrame(() => {
+    if (STATE.mapHome) STATE.mapHome.relayout();
+  });
+
   // 화면 회전 · 리사이즈 대응
-  window.addEventListener('resize', applyHeight);
-  screen.orientation && screen.orientation.addEventListener('change', applyHeight);
+  const onResize = () => { if (STATE.mapHome) STATE.mapHome.relayout(); };
+  window.addEventListener('resize', onResize);
+  screen.orientation && screen.orientation.addEventListener('change', onResize);
 
   let stopOverlays = [], lastLevel = 8;
   const showStopDots = () => {

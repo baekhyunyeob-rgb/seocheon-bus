@@ -89,15 +89,12 @@ a { text-decoration: none; }
   position: relative;
 }
 
-/* ✅ 홈 지도 height 수정
-   부모(flex:1)가 명시적 height를 갖지 않으면
-   iOS Safari / Android WebView에서 height:100% → 0 으로 계산됨.
-   position:absolute + inset:0 으로 부모를 완전히 채우는 방식으로 변경.
-   (JS의 _fixMapHeight()와 이중 보완) */
+/* 홈 지도: position:absolute + inset:0 으로 부모 div를 완전히 채움
+   인라인 height 속성 없음 → top/bottom:0 으로 높이 자동 결정
+   → iOS Safari / Android WebView 에서도 안전 */
 #map-home {
   position: absolute;
-  top: 0; right: 0; bottom: 0; left: 0;
-  height: auto;
+  top: 0; left: 0; right: 0; bottom: 0;
 }
 
 /* ===== 페이지 헤더 ===== */
@@ -149,7 +146,7 @@ a { text-decoration: none; }
 }
 
 /* ===== 홈 화면 ===== */
-#screen-home { position: relative; overflow: hidden; }
+#screen-home { position: relative; }
 
 .home-sheet {
   padding: 12px 12px 10px;

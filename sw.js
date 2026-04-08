@@ -2,7 +2,7 @@
 // 기존 Service Worker가 85개짜리 route_coords.json을 캐시하고 있던 문제를 해결.
 // 이 SW는 모든 캐시를 삭제하고 네트워크를 직접 통과시킨다.
 
-const SW_VERSION = 'v2025-03-27';
+const SW_VERSION = 'v2026-04-08';
 
 self.addEventListener('install', event => {
   // 즉시 활성화 (waiting 단계 스킵)
