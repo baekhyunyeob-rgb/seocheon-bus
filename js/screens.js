@@ -188,11 +188,10 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     const count = route[ck] || 0;
     if (!count || !route['첫차'] || !route['막차']) return;
 
-    // 기점→검색 정류장 소요시간 추정
-    const fc = coords[0], sc = coords[idx];
-    const leg0 = (fc?.lat && sc?.lat)
-      ? Math.round(distM(fc.lat, fc.lng, sc.lat, sc.lng) / 1000 * 2.5)
-      : Math.round((route['거리'] || 10) * 2.5 * idx / Math.max(coords.length - 1, 1));
+    // 기점→검색 정류장 소요시간 추정 (segMin 방식)
+    // segMin: 1순위 timetable 통과시각 차이, 2순위 전체소요시간×구간비율, 3순위 직선거리×1.5
+    const routeKey0 = String(route['번호']) + '_' + route['기점'];
+    const leg0 = segMin(routeKey0, coords, 0, idx, route['거리'], dayType);
 
     // ── 순환 노선 판별 ────────────────────────────────────
     // 종점이 경유 텍스트 중간에도 나타나면 순환 노선
@@ -254,22 +253,45 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     }
 
     const ttRows = tt ? (tt[dayType] || tt['weekday'] || []) : [];
-    const useTT  = ttColIdx !== -1 && ttRows.length > 0;
 
-    if (useTT) {
-      // timetable 실제 통과 시각 사용
+    // ── 통과시각 결정 (3단계 우선순위) ──────────────────────────────
+    // 1순위: timetable 해당 컬럼에 실제 HH:MM 시간이 있는 행
+    // 2순위: 시간은 없지만 경유 표시(텍스트값)가 있는 행 → 기점 출발시각 + segMin 추정
+    //        예) '장항역', '김산' → 해당 차량은 경유하지만 정확한 시간 미기재
+    // 3순위: timetable 컬럼 자체가 없는 경우 → getRouteTimes 기점시각 + segMin 추정
+    // ──────────────────────────────────────────────────────────────
+    let addedCount = 0;
+
+    if (ttColIdx !== -1 && ttRows.length > 0) {
       ttRows.forEach(row => {
-        const cell = Array.isArray(row) ? row[ttColIdx] : null;
-        if (!cell || typeof cell !== 'string' || !cell.includes(':')) return;
-        const passMin = timeToMin(cell);
-        rows.push({ passMin, busNum, color, via: viaList.join(' → '), terminus, isPast: passMin < nMin, route });
+        if (!Array.isArray(row)) return;
+        const cell    = ttColIdx < row.length ? row[ttColIdx] : null;
+        const depCell = row[0];
+        const depMin  = (depCell && typeof depCell === 'string' && depCell.includes(':'))
+                        ? timeToMin(depCell) : null;
+
+        if (cell && typeof cell === 'string' && cell.includes(':')) {
+          // 1순위: 실제 통과시각
+          const passMin = timeToMin(cell);
+          rows.push({ passMin, busNum, color, via: viaList.join(' → '), terminus, isPast: passMin < nMin, route });
+          addedCount++;
+        } else if (depMin !== null) {
+          // 2순위: 경유 표시(텍스트 or null)가 있고 기점 출발시각은 있음 → 추정
+          // null = 일부 차량은 이 정류장 미경유일 수 있으나 데이터 불명확 → 추정 포함
+          // 텍스트 = '장항역','김산' 등 경유 표시 → 반드시 추정
+          const passMin = depMin + leg0;
+          rows.push({ passMin, busNum, color, via: viaList.join(' → '), terminus, isPast: passMin < nMin, route, estimated: true });
+          addedCount++;
+        }
       });
-    } else {
-      // fallback: 출발시각 + 소요시간 추정
+    }
+
+    if (addedCount === 0) {
+      // 3순위: timetable 컬럼 없거나 기점시각도 없는 경우
       const busTimes = getRouteTimes(route, dayType);
       busTimes.forEach(depMin => {
         const passMin = depMin + leg0;
-        rows.push({ passMin, busNum, color, via: viaList.join(' → '), terminus, isPast: passMin < nMin, route });
+        rows.push({ passMin, busNum, color, via: viaList.join(' → '), terminus, isPast: passMin < nMin, route, estimated: true });
       });
     }
   });
@@ -311,6 +333,14 @@ function renderStopTimetable(stopName, displayName, lat, lng) {
     </div>`;
   });
 
+  // 추정 시간이 하나라도 있으면 안내 문구 추가
+  const hasEstimated = rows.some(r => r.estimated);
+  if (hasEstimated) {
+    html += `<div style="padding:10px 14px 8px;font-size:11px;color:var(--text-3);line-height:1.6">
+      <span style="opacity:.6">~</span> 표시는 기점 출발시각과 정류장 간 직선거리 비율로 추정한 시간입니다.
+      실제 시간과 다를 수 있으니 여유 있게 이용하세요.
+    </div>`;
+  }
   document.getElementById('timetable-body').innerHTML = html;
 }
 

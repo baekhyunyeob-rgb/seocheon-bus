@@ -237,22 +237,44 @@ function getRouteTimes(route, dayType) {
 }
 
 // timetable.json에서 특정 정류장의 통과 시각 배열 반환
-// stopName: 시간표상 정류장 이름, returns: [분, ...] 배열 (null 제외)
+// stopName: 시간표상 정류장 이름, returns: [분, ...] 배열
+// 실제 시간 없으면 기점 출발 + segMin 추정으로 fallback
 function getStopPassTimes(route, stopName, dayType) {
-  const key = route['번호'] + '_' + route['기점'];
-  const tt  = TIMETABLE[key];
+  const key    = route['번호'] + '_' + route['기점'];
+  const tt     = TIMETABLE[key];
   if (!tt) return null;
-  const stops = tt.stops || [];
-  const idx   = stops.indexOf(stopName);
-  if (idx === -1) return null;
-  const rows = tt[dayType] || tt['weekday'] || [];
-  const times = rows
+  const ttStops = tt.stops || [];
+  const ttIdx   = ttStops.indexOf(stopName);
+  const rows    = tt[dayType] || tt['weekday'] || [];
+  if (!rows.length) return null;
+
+  // 1순위: timetable 해당 컬럼에 실제 HH:MM 시간이 있는 경우
+  if (ttIdx !== -1) {
+    const direct = rows
+      .map(row => {
+        const t = Array.isArray(row) ? row[ttIdx] : null;
+        return (t && typeof t === 'string' && t.includes(':')) ? timeToMin(t) : null;
+      })
+      .filter(t => t !== null);
+    if (direct.length) return direct;
+  }
+
+  // 2순위: 기점 출발시각 + segMin 추정 (직선거리 비율 방식)
+  // coords에서 해당 정류장 인덱스를 찾아 segMin 계산
+  const coords = getRouteCoords(route);
+  const coordIdx = coords.findIndex(c => c.name === stopName ||
+    (stopName && c.name && (c.name.includes(stopName) || stopName.includes(c.name))));
+  if (coordIdx <= 0) return null;
+
+  const estimated = rows
     .map(row => {
-      const t = Array.isArray(row) ? row[idx] : null;
-      return (t && typeof t === 'string' && t.includes(':')) ? timeToMin(t) : null;
+      const dep = Array.isArray(row) ? row[0] : null;
+      return (dep && typeof dep === 'string' && dep.includes(':')) ? timeToMin(dep) : null;
     })
-    .filter(t => t !== null);
-  return times.length ? times : null;
+    .filter(t => t !== null)
+    .map(depMin => depMin + segMin(key, coords, 0, coordIdx, route['거리'], dayType));
+
+  return estimated.length ? estimated : null;
 }
 
 // 다음 버스 (분 단위 반환)
