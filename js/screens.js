@@ -410,6 +410,8 @@ function updateRoutesBackBtn() {
 
 // 노선도에서 뒤로가기
 function goBackFromRoutes() {
+  // BIS 실시간 추적 중지
+  if (typeof detachBISFromRouteMap === 'function') detachBISFromRouteMap();
   // 진행 중인 tryShow 루프 취소
   if (STATE._tryShowTimer) { clearTimeout(STATE._tryShowTimer); STATE._tryShowTimer = null; }
 
@@ -605,9 +607,14 @@ function selectRoute(route) {
   // 지도에 노선 표시
   if (STATE.mapRoutes) {
     showRouteOnMap(route, null);
+    if (typeof attachBISToRouteMap === 'function') attachBISToRouteMap();
   } else {
     const tryShow = () => {
-      if (STATE.mapRoutes) { STATE._tryShowTimer = null; showRouteOnMap(route, null); }
+      if (STATE.mapRoutes) {
+        STATE._tryShowTimer = null;
+        showRouteOnMap(route, null);
+        if (typeof attachBISToRouteMap === 'function') attachBISToRouteMap();
+      }
       else STATE._tryShowTimer = setTimeout(tryShow, 200);
     };
     tryShow();
