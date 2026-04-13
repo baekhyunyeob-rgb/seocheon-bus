@@ -12,7 +12,7 @@
 //   3. stopBISTracking() → 추적 중지
 // =====================================================
 
-const TAGO_KEY  = '58b48b0d19a525cf18e98d85a1b68cc560700393a7ed41f7538cc0758386b039';
+// TAGO_KEY: screens.js에서 전역 선언됨, 중복 방지로 여기선 생략
 const TAGO_BASE = 'https://apis.data.go.kr/1613000/BusLcInfoInqireService';
 
 // 서천군 도시코드 — 초기화 시 API로 확인 후 저장
