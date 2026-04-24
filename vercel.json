@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/cnbus-proxy/:path*",
+      "destination": "https://www.chungnam.go.kr/cnbus/:path*"
+    }
+  ]
+}

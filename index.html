@@ -234,10 +234,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   initLocation();
   initRoutesScreen();
   loadKakaoMap();
-  // BIS 실시간 위치 초기화 (kakao SDK 로드 후 실행)
-  initBIS().then(ok => {
-    if (ok) console.log("[BIS] 실시간 버스위치 서비스 준비 완료");
-  });
+  // BIS 초기화 (홈 지도 연결은 maps.js의 _initHomeMap 완료 후 자동)
+  initBIS();
 
   history.replaceState({ screen:'home' }, '', '');
   window.addEventListener('popstate', e => {

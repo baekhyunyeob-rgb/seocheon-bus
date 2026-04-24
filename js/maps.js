@@ -136,6 +136,9 @@ function _initHomeMap() {
   window.addEventListener('resize', onResize);
   screen.orientation && screen.orientation.addEventListener('change', onResize);
 
+  // CN BUS 실시간 버스위치 — 홈 지도 초기화 완료 후 연결
+  if (typeof attachBISToHomeMap === 'function') attachBISToHomeMap();
+
   let stopOverlays = [], lastLevel = 8;
   const showStopDots = () => {
     stopOverlays.forEach(o=>o.setMap(null)); stopOverlays=[];
